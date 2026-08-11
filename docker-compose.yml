@@ -1,0 +1,17 @@
+services:
+  bus-tracking-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bus_tracking_app
+    ports:
+      # Host 3009 libre en 172.16.222.222 (3000/3002/3003/3008 ocupados o reservados)
+      - "3009:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
