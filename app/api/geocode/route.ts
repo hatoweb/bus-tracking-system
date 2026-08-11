@@ -47,13 +47,27 @@ export async function GET(request: NextRequest) {
     url.searchParams.set('viewbox', AMA_NOMINATIM_VIEWBOX)
     url.searchParams.set('bounded', '1')
 
-    let res = await fetch(url.toString(), {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'bus-tracking-system/1.0 (AMA Asuncion-Central; contacto@local)',
-      },
-      cache: 'no-store',
-    })
+    let res: Response
+    try {
+      res = await fetch(url.toString(), {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent':
+            'bus-tracking-system/1.0 (AMA Asuncion-Central; contacto@local)',
+        },
+        cache: 'no-store',
+      })
+    } catch (netErr: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'El servidor no pudo salir a Internet (Nominatim). Usá búsqueda local o marcar en el mapa.',
+          detail: netErr?.message,
+        },
+        { status: 502 }
+      )
+    }
 
     if (!res.ok) {
       return NextResponse.json(

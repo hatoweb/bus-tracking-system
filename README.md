@@ -54,6 +54,13 @@ docker compose up -d --build
 
 `GEO_ITINERARIOS_URL` en el `.env` del contenedor debe ser `http://host.docker.internal:8020` si la API corre en el mismo servidor.
 
+Si geo-itinerarios no está levantado, la app consulta paradas/líneas directo a CID.
+
+### GPS del navegador (HTTP)
+
+Chrome **bloquea** `navigator.geolocation` en `http://172.16.222.222` (solo HTTPS o localhost).  
+En ese caso usá **Marcar en mapa** para origen/destino. Para habilitar GPS real hay que publicar la app detrás de HTTPS (nginx/Caddy).
+
 ## Variables de entorno
 
 Ver `.env.example`. No commitear `.env` ni `.env.local`.
