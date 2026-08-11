@@ -1,0 +1,11 @@
+{
+	auto_https off
+}
+
+# HTTPS interno (certificado de Caddy).
+# Chrome solo habilita GPS en orígenes seguros.
+# Puerto host: 3443 (libre en 172.16.222.222)
+https://:3443 {
+	tls internal
+	reverse_proxy bus-tracking-app:3000
+}

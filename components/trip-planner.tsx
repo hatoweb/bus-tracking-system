@@ -352,6 +352,15 @@ export function TripPlanner({
   const [focusField, setFocusField] = useState<"origin" | "destination">(
     "destination"
   )
+  const [secureContext, setSecureContext] = useState(true)
+  const httpsGpsUrl =
+    typeof window !== "undefined"
+      ? `https://${window.location.hostname}:3443${window.location.pathname || "/"}`
+      : "https://172.16.222.222:3443"
+
+  useEffect(() => {
+    setSecureContext(window.isSecureContext)
+  }, [])
 
   const lastDraftKeyRef = useRef<string>("")
   useEffect(() => {
@@ -506,6 +515,24 @@ export function TripPlanner({
             onSubmit={handleSubmit}
             className="flex flex-col gap-2 border-t border-border px-2.5 pb-2.5 pt-2"
           >
+            {!secureContext && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-950">
+                <p className="font-semibold">
+                  El GPS no funciona en HTTP. Abrí la versión segura:
+                </p>
+                <a
+                  href={httpsGpsUrl}
+                  className="mt-1 inline-block font-bold text-sky-800 underline"
+                >
+                  {httpsGpsUrl}
+                </a>
+                <p className="mt-1 text-muted-foreground">
+                  Aceptá el aviso del certificado y permití la ubicación. O
+                  marcá el origen en el mapa.
+                </p>
+              </div>
+            )}
+
             {mapPickMode && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-900">
                 <span className="font-semibold">
@@ -561,6 +588,16 @@ export function TripPlanner({
                 <button
                   type="button"
                   onClick={() => {
+                    if (!secureContext) {
+                      setFormError(
+                        "El GPS requiere HTTPS. Abrí https://" +
+                          (typeof window !== "undefined"
+                            ? window.location.hostname
+                            : "172.16.222.222") +
+                          ":3443 o marcá el origen en el mapa."
+                      )
+                      return
+                    }
                     onUseGpsOrigin()
                     if (userLocation) {
                       setOrigin({

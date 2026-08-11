@@ -15,3 +15,21 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always
+
+  # HTTPS para que el navegador permita geolocalización (GPS)
+  bus-tracking-https:
+    image: caddy:2-alpine
+    container_name: bus_tracking_https
+    ports:
+      - "3443:3443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bus-tracking-app
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1467,12 +1467,17 @@ export function BusTracker() {
 
     // Chrome solo permite GPS en HTTPS o localhost (no en http://IP)
     if (!window.isSecureContext) {
+      const httpsUrl = `https://${window.location.hostname}:3443/`
       speak(
-        "El GPS del navegador requiere HTTPS. Marcá el origen en el mapa.",
+        "El GPS requiere la versión segura HTTPS. Abrí el enlace o marcá el origen en el mapa.",
         { force: true }
       )
       setTripFormOpen(true)
-      setMapPickMode("origin")
+      if (typeof window !== "undefined") {
+        window.alert(
+          `El navegador bloquea el GPS en HTTP.\n\nAbrí:\n${httpsUrl}\n\nAceptá el certificado y permití la ubicación.\nTambién podés marcar el origen en el mapa.`
+        )
+      }
       return
     }
 

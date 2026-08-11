@@ -10,7 +10,8 @@ Según el mapeo institucional, este sistema usa:
 
 | Servicio | Contenedor | Host | Interno | URL |
 |----------|------------|------|---------|-----|
-| Next.js | `bus_tracking_app` | **3009** | 3000 | http://172.16.222.222:3009 |
+| Next.js HTTP | `bus_tracking_app` | **3009** | 3000 | http://172.16.222.222:3009 |
+| Next.js HTTPS (GPS) | `bus_tracking_https` | **3443** | 3443 | https://172.16.222.222:3443 |
 | geo-itinerarios (aparte) | — | **8020** | 8020 | http://172.16.222.222:8020 |
 
 `3009` y `8020` no figuran ocupados (libres frente a 3002/3003/3008, 8010/8011, etc.).
@@ -56,10 +57,13 @@ docker compose up -d --build
 
 Si geo-itinerarios no está levantado, la app consulta paradas/líneas directo a CID.
 
-### GPS del navegador (HTTP)
+### GPS del navegador
 
-Chrome **bloquea** `navigator.geolocation` en `http://172.16.222.222` (solo HTTPS o localhost).  
-En ese caso usá **Marcar en mapa** para origen/destino. Para habilitar GPS real hay que publicar la app detrás de HTTPS (nginx/Caddy).
+Chrome **bloquea** el GPS en HTTP. Usá la URL segura:
+
+**https://172.16.222.222:3443**
+
+La primera vez el navegador avisa del certificado interno: Avanzado → continuar. Después pedí permiso de ubicación.
 
 ## Variables de entorno
 
