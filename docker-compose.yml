@@ -3,20 +3,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Debe coincidir con location de nginx en sistemas.mopc.gov.py
+        BASE_PATH: /prototipo_vmt
     container_name: bus_tracking_app
     ports:
-      # Host 3009 libre en 172.16.222.222 (3000/3002/3003/3008 ocupados o reservados)
+      # Host 3009 libre en 172.16.222.222
       - "3009:3000"
     env_file:
       - .env
     environment:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
+      BASE_PATH: /prototipo_vmt
+      NEXT_PUBLIC_BASE_PATH: /prototipo_vmt
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always
 
-  # HTTPS para que el navegador permita geolocalización (GPS)
+  # HTTPS directo (GPS) — opcional si ya usan sistemas.mopc.gov.py con HTTPS
   bus-tracking-https:
     image: caddy:2-alpine
     container_name: bus_tracking_https

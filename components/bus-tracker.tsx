@@ -40,6 +40,7 @@ import { AlertsModal } from "@/components/alerts-modal"
 import { TripPlanner, type TripPlanPayload, type TripPlace } from "@/components/trip-planner"
 import dynamic from "next/dynamic"
 import { type RealBus, type RealItinerary, type RealStop, type NearbyStop } from "@/components/real-route-map"
+import { apiUrl } from "@/lib/base-path"
 
 const RealRouteMap = dynamic(
   () => import("@/components/real-route-map").then((mod) => mod.RealRouteMap),
@@ -263,7 +264,7 @@ export function BusTracker() {
   useEffect(() => {
     async function loadEmpresas() {
       try {
-        const res = await fetch("/api/empresas")
+        const res = await fetch(apiUrl("/api/empresas"))
         const data = await res.json()
         if (data.success && data.data) {
           setEmpresas(data.data)
@@ -280,12 +281,12 @@ export function BusTracker() {
     async function fetchRealData() {
       try {
         const itinUrl = selectedCodCatalogo
-          ? `/api/itinerarios?cod_catalogo=${selectedCodCatalogo}`
-          : "/api/itinerarios"
+          ? apiUrl(`/api/itinerarios?cod_catalogo=${selectedCodCatalogo}`)
+          : apiUrl("/api/itinerarios")
 
         let busUrl = selectedCodCatalogo
-          ? `/api/buses?cod_catalogo=${selectedCodCatalogo}`
-          : "/api/buses"
+          ? apiUrl(`/api/buses?cod_catalogo=${selectedCodCatalogo}`)
+          : apiUrl("/api/buses")
 
         // Durante un viaje planificado: solo buses de la empresa/línea elegida
         if (tripBusFilter && (tripBusFilter.catalogos.length > 0 || tripBusFilter.lineas.length > 0)) {
@@ -311,7 +312,7 @@ export function BusTracker() {
             params.set("lat", String(refLat))
             params.set("lng", String(refLng))
           }
-          busUrl = `/api/viaje/buses-relevantes?${params.toString()}`
+          busUrl = apiUrl(`/api/viaje/buses-relevantes?${params.toString()}`)
         }
 
         const [resBuses, resItin] = await Promise.all([fetch(busUrl), fetch(itinUrl)])
@@ -410,8 +411,10 @@ export function BusTracker() {
 
       try {
         const url =
-          `/api/paradas/cercanas?lat=${lat}&lng=${lng}` +
-          `&radio_m=${nearbyRadioM}&limit=${nearbyLimit}&fuente=all`
+          apiUrl(
+            `/api/paradas/cercanas?lat=${lat}&lng=${lng}` +
+              `&radio_m=${nearbyRadioM}&limit=${nearbyLimit}&fuente=all`
+          )
         const res = await fetch(url, { signal: controller.signal, cache: "no-store" })
         const data = await res.json()
 
@@ -530,7 +533,9 @@ export function BusTracker() {
       try {
         const ids = nearbyStops.map((s) => s.id).join(",")
         const res = await fetch(
-          `/api/paradas/empresa-en-cercanas?cod_catalogo=${selectedCodCatalogo}&parada_ids=${ids}`,
+          apiUrl(
+            `/api/paradas/empresa-en-cercanas?cod_catalogo=${selectedCodCatalogo}&parada_ids=${ids}`
+          ),
           { cache: "no-store" }
         )
         const data = await res.json()
@@ -673,13 +678,17 @@ export function BusTracker() {
 
         const [originRes, destRes] = await Promise.all([
           fetch(
-            `/api/paradas/cercanas?lat=${plan.origin.lat}&lng=${plan.origin.lng}` +
-              `&radio_m=${nearbyRadioM}&limit=${nearbyLimit}&fuente=all`,
+            apiUrl(
+              `/api/paradas/cercanas?lat=${plan.origin.lat}&lng=${plan.origin.lng}` +
+                `&radio_m=${nearbyRadioM}&limit=${nearbyLimit}&fuente=all`
+            ),
             { cache: "no-store" }
           ),
           fetch(
-            `/api/paradas/cercanas?lat=${plan.destination.lat}&lng=${plan.destination.lng}` +
-              `&radio_m=${Math.max(nearbyRadioM, 1500)}&limit=${Math.max(nearbyLimit, 5)}&fuente=all`,
+            apiUrl(
+              `/api/paradas/cercanas?lat=${plan.destination.lat}&lng=${plan.destination.lng}` +
+                `&radio_m=${Math.max(nearbyRadioM, 1500)}&limit=${Math.max(nearbyLimit, 5)}&fuente=all`
+            ),
             { cache: "no-store" }
           ),
         ])
@@ -696,11 +705,12 @@ export function BusTracker() {
         const originIds = originParsed.map((s) => s.id)
         const destIds = destParsed.map((s) => s.id)
 
-        const sugUrl =
+        const sugUrl = apiUrl(
           `/api/viaje/sugerir-empresas?parada_ids_origen=${originIds.join(",")}` +
-          `&parada_ids_destino=${destIds.join(",")}` +
-          `&limit=12` +
-          (plan.codCatalogo ? `&cod_catalogo=${plan.codCatalogo}` : "")
+            `&parada_ids_destino=${destIds.join(",")}` +
+            `&limit=12` +
+            (plan.codCatalogo ? `&cod_catalogo=${plan.codCatalogo}` : "")
+        )
         const sugRes = await fetch(sugUrl, { cache: "no-store" })
         const sugData = await sugRes.json()
         const suggestions = Array.isArray(sugData.suggestions) ? sugData.suggestions : []
@@ -824,7 +834,9 @@ export function BusTracker() {
           markedDest.slice(0, 6).map(async (s) => {
             try {
               const res = await fetch(
-                `/api/paradas/${s.id}/lineas-vinculadas?limit=40&distinct_linea=true`,
+                apiUrl(
+                  `/api/paradas/${s.id}/lineas-vinculadas?limit=40&distinct_linea=true`
+                ),
                 { cache: "no-store" }
               )
               const data = await res.json()
@@ -925,7 +937,7 @@ export function BusTracker() {
             abordajeParams.set("lineas", lineasAbordaje.join(","))
           }
           const abRes = await fetch(
-            `/api/viaje/paradas-abordaje?${abordajeParams.toString()}`,
+            apiUrl(`/api/viaje/paradas-abordaje?${abordajeParams.toString()}`),
             { cache: "no-store" }
           )
           const abData = await abRes.json()
@@ -1271,7 +1283,9 @@ export function BusTracker() {
       setBoardingRouteLoading(true)
       try {
         const lineasRes = await fetch(
-          `/api/paradas/${stop.id}/lineas-vinculadas?limit=50&distinct_linea=true`,
+          apiUrl(
+            `/api/paradas/${stop.id}/lineas-vinculadas?limit=50&distinct_linea=true`
+          ),
           { cache: "no-store" }
         )
         const lineasData = await lineasRes.json()
@@ -1467,15 +1481,15 @@ export function BusTracker() {
 
     // Chrome solo permite GPS en HTTPS o localhost (no en http://IP)
     if (!window.isSecureContext) {
-      const httpsUrl = `https://${window.location.hostname}:3443/`
+      const httpsUrl = `https://sistemas.mopc.gov.py/prototipo_vmt/`
       speak(
-        "El GPS requiere la versión segura HTTPS. Abrí el enlace o marcá el origen en el mapa.",
+        "El GPS requiere HTTPS. Abrí sistemas.mopc.gov.py/prototipo_vmt o marcá el origen en el mapa.",
         { force: true }
       )
       setTripFormOpen(true)
       if (typeof window !== "undefined") {
         window.alert(
-          `El navegador bloquea el GPS en HTTP.\n\nAbrí:\n${httpsUrl}\n\nAceptá el certificado y permití la ubicación.\nTambién podés marcar el origen en el mapa.`
+          `El navegador bloquea el GPS en HTTP.\n\nAbrí:\n${httpsUrl}\n\nTambién podés marcar el origen en el mapa.`
         )
       }
       return

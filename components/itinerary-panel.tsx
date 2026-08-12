@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Building2, Route, CheckCircle2 } from "lucide-react"
+import { apiUrl } from "@/lib/base-path"
 
 export type Empresa = {
   eot_id: number
@@ -49,7 +50,7 @@ export function ItineraryPanel({ onAnnounce, empresas, selectedCodCatalogo, setS
 
       setLoading(true)
       try {
-        const url = `/api/itinerarios?cod_catalogo=${selectedCodCatalogo}`
+        const url = apiUrl(`/api/itinerarios?cod_catalogo=${selectedCodCatalogo}`)
         const res = await fetch(url)
         const data = await res.json()
         if (data.success && data.data) {

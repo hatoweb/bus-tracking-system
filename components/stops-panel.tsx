@@ -6,6 +6,7 @@ import { type Bus, STOPS, nearestStopInfo } from "@/lib/transit-data"
 import { type RealStop } from "@/components/real-route-map"
 
 import { type Empresa } from "@/components/itinerary-panel"
+import { apiUrl } from "@/lib/base-path"
 
 type StopsPanelProps = {
   buses: Bus[]
@@ -32,7 +33,7 @@ export function StopsPanel({ buses, onAnnounceStop, voiceEnabled, onAnnounce, em
 
       setLoading(true)
       try {
-        const res = await fetch(`/api/paradas?cod_catalogo=${selectedCodCatalogo}`)
+        const res = await fetch(apiUrl(`/api/paradas?cod_catalogo=${selectedCodCatalogo}`))
         const data = await res.json()
         if (data.success && data.data) {
           setRealStops(data.data)

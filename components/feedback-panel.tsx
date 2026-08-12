@@ -15,6 +15,7 @@ import {
   Clock,
   History
 } from "lucide-react"
+import { apiUrl } from "@/lib/base-path"
 
 type FeedbackType = "reclamo" | "sugerencia" | "consulta" | "reporte_bus"
 
@@ -60,7 +61,9 @@ export function FeedbackPanel({ userEmail, userName }: FeedbackPanelProps) {
   const fetchHistorial = async () => {
     setLoadingHistorial(true)
     try {
-      const url = contacto ? `/api/reclamos?email=${encodeURIComponent(contacto)}` : "/api/reclamos"
+      const url = contacto
+        ? apiUrl(`/api/reclamos?email=${encodeURIComponent(contacto)}`)
+        : apiUrl("/api/reclamos")
       const res = await fetch(url)
       const data = await res.json()
       if (data.success && data.data) {
@@ -85,7 +88,7 @@ export function FeedbackPanel({ userEmail, userName }: FeedbackPanelProps) {
 
     setLoading(true)
     try {
-      const res = await fetch("/api/reclamos", {
+      const res = await fetch(apiUrl("/api/reclamos"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

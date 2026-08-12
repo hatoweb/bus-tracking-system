@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react"
 import { type Empresa } from "@/components/itinerary-panel"
+import { apiUrl } from "@/lib/base-path"
 
 export type TripPlace = {
   id: string
@@ -122,10 +123,10 @@ function PlaceSearchField({
     setError(null)
     try {
       const [localRes, geoRes] = await Promise.all([
-        fetch(`/api/lugares/buscar?q=${encodeURIComponent(q)}&limit=8`, {
+        fetch(apiUrl(`/api/lugares/buscar?q=${encodeURIComponent(q)}&limit=8`), {
           cache: "no-store",
         }),
-        fetch(`/api/geocode?q=${encodeURIComponent(q)}&limit=5`, {
+        fetch(apiUrl(`/api/geocode?q=${encodeURIComponent(q)}&limit=5`), {
           cache: "no-store",
         }),
       ])
@@ -179,7 +180,7 @@ function PlaceSearchField({
     setLoading(true)
     try {
       const res = await fetch(
-        `/api/geocode?q=${encodeURIComponent(hit.label)}&limit=1`,
+        apiUrl(`/api/geocode?q=${encodeURIComponent(hit.label)}&limit=1`),
         { cache: "no-store" }
       )
       const data = await res.json()
@@ -355,8 +356,10 @@ export function TripPlanner({
   const [secureContext, setSecureContext] = useState(true)
   const httpsGpsUrl =
     typeof window !== "undefined"
-      ? `https://${window.location.hostname}:3443${window.location.pathname || "/"}`
-      : "https://172.16.222.222:3443"
+      ? window.location.protocol === "https:"
+        ? window.location.href
+        : `https://${window.location.hostname}:3443/prototipo_vmt/`
+      : "https://sistemas.mopc.gov.py/prototipo_vmt/"
 
   useEffect(() => {
     setSecureContext(window.isSecureContext)

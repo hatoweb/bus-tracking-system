@@ -4,17 +4,42 @@ Seguimiento de buses AMA (Asunción / Central): origen–destino, paradas oficia
 
 Repo: https://github.com/hatoweb/bus-tracking-system/
 
+## Acceso público (nginx)
+
+URL: **https://sistemas.mopc.gov.py/prototipo_vmt/**
+
+La app se construye con `BASE_PATH=/prototipo_vmt`. En el servidor nginx debe
+proxyar **sin quitar** ese prefijo. Fragmento listo en
+[`deploy/nginx-prototipo_vmt.conf`](deploy/nginx-prototipo_vmt.conf).
+
+Tras desplegar:
+
+```bash
+cd /home/user/bus-tracking-system
+git pull
+docker compose up -d --build
+```
+
+Y en el host de nginx (si aplica):
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+Si ves `404 Not Found nginx`, falta el `location /prototipo_vmt/` o el
+`proxy_pass` no apunta a `http://172.16.222.222:3009/prototipo_vmt/`.
+
 ## Puertos en 172.16.222.222
 
 Según el mapeo institucional, este sistema usa:
 
 | Servicio | Contenedor | Host | Interno | URL |
 |----------|------------|------|---------|-----|
-| Next.js HTTP | `bus_tracking_app` | **3009** | 3000 | http://172.16.222.222:3009 |
-| Next.js HTTPS (GPS) | `bus_tracking_https` | **3443** | 3443 | https://172.16.222.222:3443 |
+| Next.js HTTP | `bus_tracking_app` | **3009** | 3000 | http://172.16.222.222:3009/prototipo_vmt/ |
+| Next.js HTTPS (GPS) | `bus_tracking_https` | **3443** | 3443 | https://172.16.222.222:3443/prototipo_vmt/ |
 | geo-itinerarios (aparte) | — | **8020** | 8020 | http://172.16.222.222:8020 |
 
-`3009` y `8020` no figuran ocupados (libres frente a 3002/3003/3008, 8010/8011, etc.).
+`3009`, `3443` y `8020` no figuran ocupados (libres frente a 3002/3003/3008, 8010/8011, etc.).
 
 ## Desarrollo local
 
