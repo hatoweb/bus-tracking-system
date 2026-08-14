@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { poolCID } from '@/lib/db'
+import { cidConfigError, poolCID } from '@/lib/db'
 import { AMA_BBOX, isInsideAmaBbox, textLooksLikeAma } from '@/lib/ama'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
 
@@ -16,6 +16,11 @@ export async function GET(request: NextRequest) {
 
     if (q.length < 2) {
       return NextResponse.json({ success: true, results: [], ambito: 'ama' })
+    }
+
+    const cfg = cidConfigError()
+    if (cfg) {
+      return NextResponse.json({ success: false, error: cfg }, { status: 503 })
     }
 
     const like = `%${q}%`

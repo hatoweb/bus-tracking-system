@@ -17,6 +17,8 @@ services:
       HOSTNAME: "0.0.0.0"
       BASE_PATH: /prototipo_vmt
       NEXT_PUBLIC_BASE_PATH: /prototipo_vmt
+      # Si .env no define la URL, no usar 127.0.0.1 dentro del contenedor
+      GEO_ITINERARIOS_URL: ${GEO_ITINERARIOS_URL:-http://host.docker.internal:8020}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always

@@ -3,7 +3,7 @@ import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
 
 const GEO_ITINERARIOS_URL =
-  process.env.GEO_ITINERARIOS_URL || 'http://127.0.0.1:8020'
+  process.env.GEO_ITINERARIOS_URL || 'http://host.docker.internal:8020'
 
 function summarizeLineas(rows: any[], limit: number, distinct: boolean) {
   const lineasMin = new Map<string, any>()

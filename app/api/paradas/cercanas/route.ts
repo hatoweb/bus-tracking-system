@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { poolCID } from '@/lib/db'
+import { cidConfigError, poolCID } from '@/lib/db'
 
 const GEO_ITINERARIOS_URL =
-  process.env.GEO_ITINERARIOS_URL || 'http://127.0.0.1:8020'
+  process.env.GEO_ITINERARIOS_URL || 'http://host.docker.internal:8020'
 
 async function fetchFromGeoItinerarios(url: string) {
   const controller = new AbortController()
@@ -79,6 +79,11 @@ async function fetchFromCid(
     ORDER BY distancia_m ASC
     LIMIT $4
   `
+
+  const cfg = cidConfigError()
+  if (cfg) {
+    throw new Error(cfg)
+  }
 
   let result
   try {
@@ -165,14 +170,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(fallback, { status: 200 })
   } catch (error: any) {
     console.error('Error /api/paradas/cercanas:', error)
+    const msg =
+      error?.message ||
+      'No se pudieron cargar paradas cercanas (geo-itinerarios ni CID).'
+    const config = /Faltan variables|\.env|localhost dentro/i.test(msg)
     return NextResponse.json(
-      {
-        success: false,
-        error:
-          error?.message ||
-          'No se pudieron cargar paradas cercanas (geo-itinerarios ni CID).',
-      },
-      { status: 502 }
+      { success: false, error: msg },
+      { status: config ? 503 : 502 }
     )
   }
 }

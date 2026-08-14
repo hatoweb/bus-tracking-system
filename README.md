@@ -82,6 +82,21 @@ docker compose up -d --build
 
 Si geo-itinerarios no está levantado, la app consulta paradas/líneas directo a CID.
 
+### Errores 500 / 502 (`ECONNREFUSED 127.0.0.1:5432`)
+
+El contenedor no tiene las credenciales de CID/GPS. `127.0.0.1` dentro de Docker **no** es PostgreSQL del servidor.
+
+```bash
+cd /home/user/bus-tracking-system
+# Completar con los mismos valores que .env.local (host, puerto, user, password, name)
+nano .env
+docker compose up -d --force-recreate
+docker compose logs --tail=50 bus-tracking-app
+curl -s http://127.0.0.1:3009/prototipo_vmt/api/health
+```
+
+`/api/health` debe devolver `"ok": true` y `"cid": { "configured": true }`.
+
 ### GPS del navegador
 
 Chrome **bloquea** el GPS en HTTP. Usá la URL segura:

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
-import { poolCID } from '@/lib/db'
+import { cidConfigError, poolCID } from '@/lib/db'
 
 export async function GET() {
   try {
+    const cfg = cidConfigError()
+    if (cfg) {
+      return NextResponse.json({ success: false, error: cfg }, { status: 503 })
+    }
     const result = await poolCID.query(`
       SELECT DISTINCT
         e.eot_id,
