@@ -40,6 +40,7 @@ import { TripPlanner, type TripPlanPayload, type TripPlace } from "@/components/
 import dynamic from "next/dynamic"
 import { type RealBus, type RealItinerary, type RealStop, type NearbyStop } from "@/components/real-route-map"
 import { apiUrl } from "@/lib/base-path"
+import { formatTripPlanSummary, type TripPlanResult } from "@/lib/trip-plan"
 
 const RealRouteMap = dynamic(
   () => import("@/components/real-route-map").then((mod) => mod.RealRouteMap),
@@ -207,6 +208,7 @@ export function BusTracker() {
     }[]
   >([])
   const [tripSummary, setTripSummary] = useState<string | null>(null)
+  const [tripPlan, setTripPlan] = useState<TripPlanResult | null>(null)
   const [destNearbyStops, setDestNearbyStops] = useState<NearbyStop[]>([])
   const [tripGuidance, setTripGuidance] = useState<{
     mode: "walk_to_stop" | "to_destination"
@@ -641,6 +643,7 @@ export function BusTracker() {
       setTripPlanning(true)
       setTripSuggestions([])
       setTripSummary(null)
+      setTripPlan(null)
       setDestNearbyStops([])
       setTripGuidance(null)
       setTripRouteCoords(null)
@@ -703,6 +706,28 @@ export function BusTracker() {
 
         const originIds = originParsed.map((s) => s.id)
         const destIds = destParsed.map((s) => s.id)
+
+        let computedPlan: TripPlanResult | null = null
+        try {
+          const planUrl = apiUrl(
+            `/api/viaje/planificar?parada_ids_origen=${originIds.join(",")}` +
+              `&parada_ids_destino=${destIds.join(",")}` +
+              `&lat_origen=${plan.origin.lat}&lng_origen=${plan.origin.lng}` +
+              `&lat_destino=${plan.destination.lat}&lng_destino=${plan.destination.lng}` +
+              (plan.codCatalogo ? `&cod_catalogo=${plan.codCatalogo}` : "")
+          )
+          const planRes = await fetch(planUrl, { cache: "no-store" })
+          const planData = await planRes.json()
+          if (planData?.success && planData.best) {
+            computedPlan = planData.best as TripPlanResult
+            setTripPlan(computedPlan)
+          } else {
+            setTripPlan(null)
+          }
+        } catch (err) {
+          console.error("Error planificando tramos:", err)
+          setTripPlan(null)
+        }
 
         const sugUrl = apiUrl(
           `/api/viaje/sugerir-empresas?parada_ids_origen=${originIds.join(",")}` +
@@ -817,6 +842,42 @@ export function BusTracker() {
         }
         if (alightingIdSet.size === 0) {
           for (const id of destIds) alightingIdSet.add(Number(id))
+        }
+
+        if (computedPlan?.type === "transfer" && computedPlan.legs.length >= 2) {
+          const leg1 = computedPlan.legs[0]
+          const leg2 = computedPlan.legs[1]
+          boardingIdSet.clear()
+          alightingIdSet.clear()
+          boardingIdSet.add(leg1.boarding.id)
+          if (computedPlan.transfer?.id) boardingIdSet.add(computedPlan.transfer.id)
+          alightingIdSet.add(leg2.alighting.id)
+          setTripSummary(formatTripPlanSummary(computedPlan))
+          speak(formatTripPlanSummary(computedPlan), { force: true })
+          const transferCatalogos = [
+            ...new Set(
+              computedPlan.legs
+                .map((l) => l.cod_catalogo)
+                .filter((n) => Number.isFinite(n))
+            ),
+          ] as number[]
+          const transferLineas = [
+            ...new Set(
+              computedPlan.legs
+                .map((l) => String(l.linea || "").trim())
+                .filter(Boolean)
+            ),
+          ] as string[]
+          if (transferCatalogos.length > 0 || transferLineas.length > 0) {
+            setTripBusFilter({
+              catalogos: transferCatalogos,
+              lineas: transferLineas,
+            })
+          }
+        } else if (computedPlan?.type === "direct" && computedPlan.legs[0]) {
+          const leg = computedPlan.legs[0]
+          boardingIdSet.add(leg.boarding.id)
+          alightingIdSet.add(leg.alighting.id)
         }
 
         tripBoardingIdsRef.current = new Set(boardingIdSet)
@@ -961,6 +1022,29 @@ export function BusTracker() {
         }
 
         let boardingStops = originParsed.filter((s) => matchById.has(s.id))
+        if (
+          computedPlan?.type === "transfer" &&
+          computedPlan.legs[0]?.boarding.id
+        ) {
+          const leg1Id = computedPlan.legs[0].boarding.id
+          const leg1Stop = originParsed.find((s) => s.id === leg1Id)
+          if (leg1Stop) {
+            boardingStops = [
+              {
+                ...leg1Stop,
+                isBoardingRecommended: true,
+                rank: 1,
+                lineasEmpresa: computedPlan.legs[0].linea
+                  ? [computedPlan.legs[0].linea]
+                  : [],
+                empresasAtStop: computedPlan.legs[0].eot_nombre
+                  ? [computedPlan.legs[0].eot_nombre]
+                  : [],
+                servedByEmpresa: true,
+              },
+            ]
+          }
+        }
         if (boardingStops.length === 0) {
           boardingStops = originParsed.filter((s) =>
             (sugData.boarding_stop_ids || []).map(Number).includes(s.id)
@@ -1080,17 +1164,21 @@ export function BusTracker() {
           .filter((s) => s.isBoardingRecommended)
           .map((s) => s.source_name)
 
+        const keepTransferSummary = computedPlan?.type === "transfer"
+
         if (displayStops.length === 0) {
           setNearbyStops([])
-          setTripSummary(
-            `No hay paradas cercanas a tu ubicación con las líneas/empresas de la bajada en ${plan.destination.label}` +
-              (alightHintName ? ` (${alightHintName}).` : ".") +
-              ` Probá ampliar el radio o cambiar el destino.`
-          )
-          speak(
-            `No hay paradas cerca tuyo con las líneas que llegan a ${plan.destination.label}.`,
-            { force: true }
-          )
+          if (!keepTransferSummary) {
+            setTripSummary(
+              `No hay paradas cercanas a tu ubicación con las líneas/empresas de la bajada en ${plan.destination.label}` +
+                (alightHintName ? ` (${alightHintName}).` : ".") +
+                ` Probá ampliar el radio o cambiar el destino.`
+            )
+            speak(
+              `No hay paradas cerca tuyo con las líneas que llegan a ${plan.destination.label}.`,
+              { force: true }
+            )
+          }
         } else if (!atUsefulStop) {
           const target = nearestUseful
           const withSelected = displayStops.map((s) => ({
@@ -1128,21 +1216,23 @@ export function BusTracker() {
             boardingNames,
             targetStopName: target.source_name,
           })
-          setTripSummary(
-            `Paradas cerca tuyo que llegan a ${plan.destination.label} (vía bajada #${alightHintRank}). ` +
-              `Parada recomendada: #${target.rank}` +
-              (boardingRanks.length > 1 ? ` (también #${ranksLabel})` : "") +
-              `: ${target.source_name}.` +
-              matchLabel +
-              alightLabel
-          )
-          speak(
-            `Cerca tuyo hay paradas con las líneas de la bajada número ${alightHintRank}. Parada recomendada número ${target.rank}. ${target.source_name}.` +
-              (alightingRanks.length > 0
-                ? ` En el destino bajá en la parada número ${alightingRanks[0]}.`
-                : ""),
-            { force: true }
-          )
+          if (!keepTransferSummary) {
+            setTripSummary(
+              `Paradas cerca tuyo que llegan a ${plan.destination.label} (vía bajada #${alightHintRank}). ` +
+                `Parada recomendada: #${target.rank}` +
+                (boardingRanks.length > 1 ? ` (también #${ranksLabel})` : "") +
+                `: ${target.source_name}.` +
+                matchLabel +
+                alightLabel
+            )
+            speak(
+              `Cerca tuyo hay paradas con las líneas de la bajada número ${alightHintRank}. Parada recomendada número ${target.rank}. ${target.source_name}.` +
+                (alightingRanks.length > 0
+                  ? ` En el destino bajá en la parada número ${alightingRanks[0]}.`
+                  : ""),
+              { force: true }
+            )
+          }
         } else {
           // Ya en parada correcta → trazar hacia destino
           const nearest = nearestUseful
@@ -1188,23 +1278,25 @@ export function BusTracker() {
               : destTarget
                 ? ` Bajá en #${destTarget.rank} (${destTarget.source_name}).`
                 : ""
-          setTripSummary(
-            `Estás en la parada correcta (#${nearest?.rank}). ` +
-              (toDest
-                ? `Ruta de referencia al destino: ~${(toDest.distanceM / 1000).toFixed(1)} km / ${toDest.durationMin} min. `
-                : "") +
-              (lineasHint
-                ? `Líneas de la bajada: ${lineasHint}. `
-                : empCount > 0
-                  ? `${empCount} empresa(s) te llevan a ${plan.destination.label}.`
-                  : "No se encontraron empresas que conecten origen y destino.") +
-              alightTxt
-          )
-          speak(
-            `Estás en la parada correcta. Las líneas de la bajada te llevan hacia ${plan.destination.label}.` +
-              (alightingRanks[0] ? ` Bajá en la parada número ${alightingRanks[0]}.` : ""),
-            { force: true }
-          )
+          if (!keepTransferSummary) {
+            setTripSummary(
+              `Estás en la parada correcta (#${nearest?.rank}). ` +
+                (toDest
+                  ? `Ruta de referencia al destino: ~${(toDest.distanceM / 1000).toFixed(1)} km / ${toDest.durationMin} min. `
+                  : "") +
+                (lineasHint
+                  ? `Líneas de la bajada: ${lineasHint}. `
+                  : empCount > 0
+                    ? `${empCount} empresa(s) te llevan a ${plan.destination.label}.`
+                    : "No se encontraron empresas que conecten origen y destino.") +
+                alightTxt
+            )
+            speak(
+              `Estás en la parada correcta. Las líneas de la bajada te llevan hacia ${plan.destination.label}.` +
+                (alightingRanks[0] ? ` Bajá en la parada número ${alightingRanks[0]}.` : ""),
+              { force: true }
+            )
+          }
         }
 
         setActiveTab("gps")
@@ -2194,6 +2286,39 @@ export function BusTracker() {
                         Ruta trazada hacia tu destino. Abajo están las empresas que pasan por esta parada.
                       </p>
                     </>
+                  )}
+                </div>
+              )}
+
+              {tripPlan && tripPlan.type === "transfer" && (
+                <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-3 shadow-sm">
+                  <h3 className="mb-2 text-sm font-semibold text-violet-950">
+                    Viaje con transbordo (2 itinerarios)
+                  </h3>
+                  <ol className="flex flex-col gap-2 text-[11px] text-violet-950">
+                    {tripPlan.legs.map((leg) => (
+                      <li
+                        key={`leg-${leg.leg}-${leg.id_itinerario}`}
+                        className="rounded-lg border border-violet-500/30 bg-background/70 px-2.5 py-2"
+                      >
+                        <p className="font-bold">
+                          Tramo {leg.leg} ·{" "}
+                          {leg.linea ? `Línea ${leg.linea}` : leg.eot_nombre}
+                          {leg.ramal ? ` (${leg.ramal})` : ""}
+                        </p>
+                        <p className="mt-0.5 text-muted-foreground">
+                          Subí: {leg.boarding.name} → Bajá: {leg.alighting.name}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {leg.eot_nombre}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                  {tripPlan.transfer && (
+                    <p className="mt-2 text-[11px] font-semibold text-violet-900">
+                      Cambiá en: {tripPlan.transfer.name}
+                    </p>
                   )}
                 </div>
               )}
