@@ -16,7 +16,6 @@ import {
   User as UserIcon,
   AlertCircle,
   CheckCircle2,
-  Map as MapIcon,
 } from "lucide-react"
 import {
   type Bus,
@@ -1101,16 +1100,8 @@ export function BusTracker() {
           setNearbyStops(withSelected)
           setSelectedBoardingStopId(target.id)
 
-          const walk = await fetchOsrmFootRoute(
-            { lat: plan.origin.lat, lng: plan.origin.lng },
-            { lat: target.latitud, lng: target.longitud }
-          )
-          if (walk) setTripRouteCoords(walk.coords)
-          else
-            setTripRouteCoords([
-              [plan.origin.lat, plan.origin.lng],
-              [target.latitud, target.longitud],
-            ])
+          // No mostrar "cómo llegar" para evitar confusión (auto vs. a pie).
+          setTripRouteCoords(null)
 
           const ranksLabel = boardingRanks.join(" o ")
           const alightingRanks = markedDest
@@ -1138,15 +1129,15 @@ export function BusTracker() {
             targetStopName: target.source_name,
           })
           setTripSummary(
-            `Paradas cerca tuyo que llegan a ${plan.destination.label} (vía bajada #${alightHintRank}). Andá a la #${target.rank}` +
+            `Paradas cerca tuyo que llegan a ${plan.destination.label} (vía bajada #${alightHintRank}). ` +
+              `Parada recomendada: #${target.rank}` +
               (boardingRanks.length > 1 ? ` (también #${ranksLabel})` : "") +
               `: ${target.source_name}.` +
-              (walk ? ` A pie ~${walk.distanceM} m / ${walk.durationMin} min.` : "") +
               matchLabel +
               alightLabel
           )
           speak(
-            `Cerca tuyo hay paradas con las líneas de la bajada número ${alightHintRank}. Caminá a la parada número ${target.rank}. ${target.source_name}.` +
+            `Cerca tuyo hay paradas con las líneas de la bajada número ${alightHintRank}. Parada recomendada número ${target.rank}. ${target.source_name}.` +
               (alightingRanks.length > 0
                 ? ` En el destino bajá en la parada número ${alightingRanks[0]}.`
                 : ""),
@@ -1230,7 +1221,7 @@ export function BusTracker() {
     [nearbyLimit, nearbyRadioM, speak, empresas]
   )
 
-  /** Elegir parada de abordaje (#1, #2…) y trazar ruta a pie */
+  /** Elegir parada de abordaje (#1, #2…) y filtrar buses relevantes */
   const handleSelectBoardingStop = useCallback(
     async (stop: NearbyStop) => {
       if (!stop?.latitud || !stop?.longitud) return
@@ -1390,7 +1381,7 @@ export function BusTracker() {
               (empresasNames.length
                 ? ` Empresas: ${empresasNames.slice(0, 3).join(", ")}.`
                 : "") +
-              ` Activá GPS para trazar la ruta. Filtrando buses en movimiento.`
+              ` Filtrando buses en movimiento.`
           )
           speak(
             `Parada ${stop.rank} seleccionada. ${lineasLabels.length} líneas en movimiento filtradas.`,
@@ -1430,17 +1421,8 @@ export function BusTracker() {
             { force: true }
           )
         } else {
-          const walk = await fetchOsrmFootRoute(
-            { lat: originLat, lng: originLng },
-            { lat: stop.latitud, lng: stop.longitud }
-          )
-          if (walk) setTripRouteCoords(walk.coords)
-          else {
-            setTripRouteCoords([
-              [originLat, originLng],
-              [stop.latitud, stop.longitud],
-            ])
-          }
+          // No trazar "cómo llegar" para evitar confusión con navegación vial.
+          setTripRouteCoords(null)
 
           setTripGuidance({
             mode: "walk_to_stop",
@@ -1451,13 +1433,11 @@ export function BusTracker() {
           })
           setTripSummary(
             `Parada elegida: #${stop.rank} · ${stop.source_name}. ` +
-              (walk
-                ? `A pie ~${walk.distanceM} m / ${walk.durationMin} min.`
-                : "Ruta aproximada en el mapa.") +
+              `Parada recomendada para abordar.` +
               busesHint
           )
           speak(
-            `Parada ${stop.rank} seleccionada. Caminá hasta ahí. Mostrando buses en movimiento de esa parada.`,
+            `Parada ${stop.rank} seleccionada. Mostrando buses en movimiento de esa parada.`,
             { force: true }
           )
         }
@@ -1854,17 +1834,6 @@ export function BusTracker() {
 
             {/* Controles de la barra superior: Voz, Alertas (Campanita) y Google Auth */}
             <div className="flex items-center gap-1.5">
-              {/* Botón de Direcciones (Google Maps) */}
-              <a
-                href="https://www.google.com/maps/dir/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                title="Cómo llegar (Google Maps)"
-              >
-                <MapIcon className="h-4 w-4" />
-              </a>
-
               {/* Campanita de Alertas */}
               <button
                 type="button"
@@ -2194,18 +2163,16 @@ export function BusTracker() {
                       : "border-emerald-500/50 bg-emerald-500/10 text-emerald-950"
                   }`}
                 >
-                  {tripGuidance.mode === "walk_to_stop" ? (
+                        {tripGuidance.mode === "walk_to_stop" ? (
                     <>
                       <p className="font-bold">
-                        {boardingRouteLoading
-                          ? "Trazando ruta a pie…"
-                          : selectedBoardingStopId
-                            ? `Caminá a la parada elegida #${
-                                nearbyStops.find((s) => s.id === selectedBoardingStopId)?.rank ||
-                                tripGuidance.boardingRanks[0] ||
-                                "?"
-                              }`
-                            : "Primero andá a una parada oficial"}
+                        {selectedBoardingStopId
+                          ? `Parada recomendada #${
+                              nearbyStops.find((s) => s.id === selectedBoardingStopId)?.rank ||
+                              tripGuidance.boardingRanks[0] ||
+                              "?"
+                            }`
+                          : "Elegí una parada oficial recomendada"}
                         {!selectedBoardingStopId && tripGuidance.boardingRanks.length > 0
                           ? `: #${tripGuidance.boardingRanks.join(" o #")}`
                           : ""}
@@ -2214,7 +2181,7 @@ export function BusTracker() {
                         {tripGuidance.targetStopName
                           ? `${tripGuidance.targetStopName}. `
                           : ""}
-                        Tocá otra parada (#) en el mapa o en la lista para cambiar. La línea teal te guía a pie.
+                        Tocá otra parada (#) en el mapa o en la lista para cambiar la recomendación.
                       </p>
                     </>
                   ) : (
@@ -2417,7 +2384,7 @@ export function BusTracker() {
                   </h2>
                   <span className="text-[10px] text-muted-foreground">
                     {boardingRouteLoading
-                      ? "Trazando ruta…"
+                      ? "Actualizando recomendación…"
                       : tripDestination
                         ? showMoreStops
                           ? "Correctas + otras cercanas"
