@@ -706,43 +706,66 @@ export function BusTracker() {
               (plan.codCatalogo ? `&cod_catalogo=${plan.codCatalogo}` : "")
           )
           const planRes = await fetch(planUrl, { cache: "no-store" })
-          const planData = await planRes.json()
-          const opts: TripPlanResult[] = Array.isArray(planData?.options)
-            ? planData.options
-            : planData?.best
-              ? [planData.best]
-              : []
-          setTripOptions(opts)
-          if (planData?.success && opts.length > 0) {
-            computedPlan = opts[0]
-            setTripPlan(computedPlan)
-            setTripSummary(formatTripPlanSummary(computedPlan))
-            speak(formatTripPlanSummary(computedPlan), { force: true })
-            const planItinIds = [
-              ...new Set(
-                (computedPlan.legs || [])
-                  .map((l) => Number(l.id_itinerario))
-                  .filter((n) => Number.isFinite(n) && n > 0)
-              ),
-            ]
-            if (planItinIds.length > 0) {
-              try {
-                const itinPlanRes = await fetch(
-                  apiUrl(`/api/itinerarios?ids=${planItinIds.join(",")}`),
-                  { cache: "no-store" }
-                )
-                const itinPlanData = await itinPlanRes.json()
-                if (itinPlanData?.success && Array.isArray(itinPlanData.data)) {
-                  setRealItineraries(itinPlanData.data)
-                  allItinerariesRef.current = itinPlanData.data
-                }
-              } catch (err) {
-                console.error("Error cargando shapes del plan:", err)
-              }
-            }
-          } else {
+          const rawText = await planRes.text()
+          let planData: any = null
+          try {
+            planData = JSON.parse(rawText)
+          } catch {
+            console.error(
+              "Error planificando tramos: respuesta no JSON",
+              planRes.status,
+              rawText.slice(0, 120)
+            )
             setTripPlan(null)
             setTripOptions([])
+            setTripSummary(
+              planRes.status === 504 || planRes.status === 502
+                ? "La búsqueda de viaje tardó demasiado. Probá de nuevo o marcá otro destino."
+                : "No se pudo planificar el viaje (error del servidor)."
+            )
+            planData = null
+          }
+          if (planData) {
+            const opts: TripPlanResult[] = Array.isArray(planData?.options)
+              ? planData.options
+              : planData?.best
+                ? [planData.best]
+                : []
+            setTripOptions(opts)
+            if (planData?.success && opts.length > 0) {
+              computedPlan = opts[0]
+              setTripPlan(computedPlan)
+              setTripSummary(formatTripPlanSummary(computedPlan))
+              speak(formatTripPlanSummary(computedPlan), { force: true })
+              const planItinIds = [
+                ...new Set(
+                  (computedPlan.legs || [])
+                    .map((l) => Number(l.id_itinerario))
+                    .filter((n) => Number.isFinite(n) && n > 0)
+                ),
+              ]
+              if (planItinIds.length > 0) {
+                try {
+                  const itinPlanRes = await fetch(
+                    apiUrl(`/api/itinerarios?ids=${planItinIds.join(",")}`),
+                    { cache: "no-store" }
+                  )
+                  const itinPlanData = await itinPlanRes.json()
+                  if (itinPlanData?.success && Array.isArray(itinPlanData.data)) {
+                    setRealItineraries(itinPlanData.data)
+                    allItinerariesRef.current = itinPlanData.data
+                  }
+                } catch (err) {
+                  console.error("Error cargando shapes del plan:", err)
+                }
+              }
+            } else {
+              setTripPlan(null)
+              setTripOptions([])
+              if (planData?.error) {
+                setTripSummary(String(planData.error))
+              }
+            }
           }
         } catch (err) {
           console.error("Error planificando tramos:", err)
