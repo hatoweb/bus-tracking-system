@@ -128,10 +128,13 @@ function PlaceSearchField({
         }),
         fetch(apiUrl(`/api/geocode?q=${encodeURIComponent(q)}&limit=5`), {
           cache: "no-store",
-        }),
+        }).catch(() => null),
       ])
-      const localData = await localRes.json()
-      const geoData = await geoRes.json()
+      const localData = await localRes.json().catch(() => ({ results: [] }))
+      const geoData =
+        geoRes && geoRes.ok
+          ? await geoRes.json().catch(() => ({ results: [] }))
+          : { results: [] }
 
       const localHits: SearchHit[] = Array.isArray(localData.results)
         ? localData.results
@@ -145,6 +148,9 @@ function PlaceSearchField({
       )
       setHits(merged)
       setOpen(true)
+      if (localHits.length === 0 && geoHits.length === 0 && geoData?.warning) {
+        setError(null)
+      }
     } catch (err: any) {
       setError(err?.message || "No se pudo buscar")
       setHits([])
@@ -183,11 +189,13 @@ function PlaceSearchField({
         apiUrl(`/api/geocode?q=${encodeURIComponent(hit.label)}&limit=1`),
         { cache: "no-store" }
       )
-      const data = await res.json()
+      const data = res.ok
+        ? await res.json().catch(() => ({ results: [] }))
+        : { results: [] }
       const first = data.results?.[0]
       if (!first?.lat || !first?.lng) {
         setError(
-          "No se encontró en Asunción / Área Metropolitana. Probá otra búsqueda."
+          "No se encontró en Asunción / Área Metropolitana. Probá otra búsqueda o marcá en el mapa."
         )
         return
       }

@@ -6,9 +6,42 @@ import {
   stripAccents,
 } from '@/lib/ama'
 
+const NOMINATIM_TIMEOUT_MS = 4500
+
+async function fetchNominatim(url: string): Promise<{ ok: boolean; data: any; error?: string }> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        // Nominatim exige User-Agent identificable
+        'User-Agent':
+          'GeoBus-MOPC/1.0 (prototipo_vmt; https://sistemas.mopc.gov.py/prototipo_vmt)',
+      },
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      return { ok: false, data: [], error: `Nominatim HTTP ${res.status}` }
+    }
+    const data = await res.json().catch(() => [])
+    return { ok: true, data }
+  } catch (err: any) {
+    const msg =
+      err?.name === 'AbortError'
+        ? 'Nominatim timeout'
+        : err?.message || 'Error de red hacia Nominatim'
+    return { ok: false, data: [], error: msg }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
- * Geocoding Nominatim limitado al Área Metropolitana de Asunción
- * (Asunción + distritos AMA de Central).
+ * Geocoding Nominatim limitado al Área Metropolitana de Asunción.
+ * Si Nominatim no es alcanzable desde el servidor, responde 200 con results=[]
+ * (no 502) para no romper la búsqueda local de paradas/lugares.
  *
  * GET ?q=Shopping+del+Sol&limit=5
  */
@@ -27,8 +60,6 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Preferir la query tal cual; el viewbox+bounded limitan al AMA.
-    // Solo agregamos "Asunción" si no hay contexto geográfico.
     const qNorm = stripAccents(q)
     const scopedQuery =
       qNorm.includes('asuncion') ||
@@ -41,45 +72,16 @@ export async function GET(request: NextRequest) {
     url.searchParams.set('q', scopedQuery)
     url.searchParams.set('format', 'json')
     url.searchParams.set('addressdetails', '1')
-    // Pedimos de más y filtramos AMA
     url.searchParams.set('limit', String(Math.min(limit * 3, 20)))
     url.searchParams.set('countrycodes', 'py')
     url.searchParams.set('viewbox', AMA_NOMINATIM_VIEWBOX)
     url.searchParams.set('bounded', '1')
 
-    let res: Response
-    try {
-      res = await fetch(url.toString(), {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent':
-            'bus-tracking-system/1.0 (AMA Asuncion-Central; contacto@local)',
-        },
-        cache: 'no-store',
-      })
-    } catch (netErr: any) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'El servidor no pudo salir a Internet (Nominatim). Usá búsqueda local o marcar en el mapa.',
-          detail: netErr?.message,
-        },
-        { status: 502 }
-      )
-    }
+    let upstream = await fetchNominatim(url.toString())
+    let data = upstream.data
 
-    if (!res.ok) {
-      return NextResponse.json(
-        { success: false, error: `Nominatim HTTP ${res.status}` },
-        { status: 502 }
-      )
-    }
-
-    let data = await res.json()
-
-    // Fallback: sin bounded, filtramos AMA a mano
-    if (!Array.isArray(data) || data.length === 0) {
+    // Fallback: sin bounded
+    if (upstream.ok && (!Array.isArray(data) || data.length === 0)) {
       const url2 = new URL('https://nominatim.openstreetmap.org/search')
       url2.searchParams.set('q', scopedQuery)
       url2.searchParams.set('format', 'json')
@@ -88,15 +90,24 @@ export async function GET(request: NextRequest) {
       url2.searchParams.set('countrycodes', 'py')
       url2.searchParams.set('viewbox', AMA_NOMINATIM_VIEWBOX)
       url2.searchParams.set('bounded', '0')
-      res = await fetch(url2.toString(), {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'bus-tracking-system/1.0 (AMA Asuncion-Central; contacto@local)',
-        },
-        cache: 'no-store',
-      })
-      if (res.ok) data = await res.json()
+      upstream = await fetchNominatim(url2.toString())
+      data = upstream.data
     }
+
+    // Nominatim caído / sin salida a Internet: no romper UI con 502
+    if (!upstream.ok) {
+      console.warn('Geocode Nominatim no disponible:', upstream.error)
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        results: [],
+        ambito: 'ama',
+        warning:
+          'Geocoding externo no disponible. Usá resultados locales o marcá en el mapa.',
+        detail: upstream.error,
+      })
+    }
+
     const results = (Array.isArray(data) ? data : [])
       .filter((item: any) => nominatimResultInAma(item))
       .slice(0, limit)
@@ -124,9 +135,13 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error geocode:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Error de geocoding' },
-      { status: 500 }
-    )
+    // Soft-fail: la búsqueda local sigue usable
+    return NextResponse.json({
+      success: true,
+      count: 0,
+      results: [],
+      ambito: 'ama',
+      warning: error?.message || 'Error de geocoding',
+    })
   }
 }
