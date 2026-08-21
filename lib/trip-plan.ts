@@ -69,20 +69,41 @@ export function formatTripPlanSummary(plan: TripPlanResult): string {
   return 'Plan de viaje calculado.'
 }
 
-/** Hasta 3 opciones: primero directos, luego transbordos más cortos. */
+/** Clave de deduplicación: misma empresa/línea = misma opción para el usuario. */
+function optionDedupeKey(plan: TripPlanResult): string {
+  if (plan.type === 'direct' && plan.legs[0]) {
+    const l = plan.legs[0]
+    const linea = (l.linea || '').trim()
+    // Una opción directa por empresa (+ línea si existe); no repetir ramales/paradas.
+    return `d|${l.cod_catalogo}|${linea}`
+  }
+  if (plan.type === 'transfer' && plan.legs.length >= 2) {
+    const [a, b] = plan.legs
+    return `t|${a.cod_catalogo}|${(a.linea || '').trim()}|${b.cod_catalogo}|${(b.linea || '').trim()}`
+  }
+  return `x|${plan.legs.map((l) => l.id_itinerario).join('-')}`
+}
+
+/** Hasta 3 opciones: primero directos, luego transbordos más cortos (sin repetir empresa/línea). */
 export function buildTripOptions(
   direct: TripPlanResult[],
   transfers: TripPlanResult[],
   limit = 3
 ): TripPlanResult[] {
   const out: TripPlanResult[] = []
-  for (const d of direct) {
-    if (out.length >= limit) break
-    out.push(d)
+  const seen = new Set<string>()
+
+  const pushUnique = (plan: TripPlanResult) => {
+    if (out.length >= limit) return
+    const key = optionDedupeKey(plan)
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(plan)
   }
-  for (const t of transfers) {
-    if (out.length >= limit) break
-    out.push(t)
-  }
+
+  // Directos ya vienen ordenados por score; el primero de cada clave gana.
+  for (const d of direct) pushUnique(d)
+  for (const t of transfers) pushUnique(t)
+
   return out.map((p, i) => ({ ...p, rank: i + 1 }))
 }
