@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cidConfigError, poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 import {
   buildTripOptions,
   type TripLeg,
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
         (ip_d.orden - ip_o.orden) AS hops
       FROM geometria.itinerario_parada ip_o
       JOIN geometria.historico_itinerario h
-        ON h.id_itinerario = ip_o.id_itinerario AND h.vigente = true
+        ON h.id_itinerario = ip_o.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
       JOIN geometria.paradas_oficiales p_o ON p_o.id = ip_o.id_parada
       JOIN geometria.itinerario_parada ip_d
         ON ip_d.id_itinerario = h.id_itinerario
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest) {
             ST_X(ST_Transform(p.geom, 4326)) AS boarding_lng
           FROM geometria.itinerario_parada ip
           JOIN geometria.historico_itinerario h
-            ON h.id_itinerario = ip.id_itinerario AND h.vigente = true
+            ON h.id_itinerario = ip.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
           JOIN geometria.paradas_oficiales p ON p.id = ip.id_parada
           JOIN public.catalogo_rutas r ON LOWER(TRIM(r.ruta_hex)) = LOWER(TRIM(h.ruta_hex))
           ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
@@ -231,7 +232,7 @@ export async function GET(request: NextRequest) {
             ST_X(ST_Transform(p.geom, 4326)) AS alighting_lng
           FROM geometria.itinerario_parada ip
           JOIN geometria.historico_itinerario h
-            ON h.id_itinerario = ip.id_itinerario AND h.vigente = true
+            ON h.id_itinerario = ip.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
           JOIN geometria.paradas_oficiales p ON p.id = ip.id_parada
           JOIN public.catalogo_rutas r ON LOWER(TRIM(r.ruta_hex)) = LOWER(TRIM(h.ruta_hex))
           ${sqlJoinLineaVigente('r', 'lrc', 'ln')}

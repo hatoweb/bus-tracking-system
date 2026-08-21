@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cidConfigError, poolCID } from '@/lib/db'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
       FROM public.eots e
       JOIN public.catalogo_rutas r ON r.id_eot_catalogo = e.cod_catalogo
       JOIN geometria.historico_itinerario h ON LOWER(h.ruta_hex) = LOWER(r.ruta_hex)
-      WHERE h.vigente = true
+      WHERE ${sqlItinerarioVigenteEnFecha('h')}
       ORDER BY e.eot_nombre ASC;
     `)
 

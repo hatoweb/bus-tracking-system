@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 /**
  * Sugiere EOTs que pasan por paradas de origen y (si hay) de destino.
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
         ARRAY_AGG(DISTINCT ${sqlNumeroLinea('ln')}) FILTER (WHERE ln.numero_linea IS NOT NULL) AS lineas
       FROM geometria.paradas_oficiales p
       JOIN geometria.itinerario_parada ip ON ip.id_parada = p.id
-      JOIN geometria.historico_itinerario h ON h.id_itinerario = ip.id_itinerario AND h.vigente = true
+      JOIN geometria.historico_itinerario h ON h.id_itinerario = ip.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
       JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
       JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
           ARRAY_AGG(DISTINCT p.id) AS parada_ids_destino
         FROM geometria.paradas_oficiales p
         JOIN geometria.itinerario_parada ip ON ip.id_parada = p.id
-        JOIN geometria.historico_itinerario h ON h.id_itinerario = ip.id_itinerario AND h.vigente = true
+        JOIN geometria.historico_itinerario h ON h.id_itinerario = ip.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
         JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
         JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
         WHERE p.id = ANY($1::int[])

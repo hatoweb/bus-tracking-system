@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 /**
  * Paradas de abordaje cerca del usuario que comparten líneas/empresas
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
           ${sqlNumeroLinea('ln')} AS linea
         FROM geometria.itinerario_parada ip
         JOIN geometria.historico_itinerario h
-          ON h.id_itinerario = ip.id_itinerario AND h.vigente = true
+          ON h.id_itinerario = ip.id_itinerario AND ${sqlItinerarioVigenteEnFecha('h')}
         JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
         ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
         JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
     const params: any[] = [origenIds]
     const filters: string[] = [
       'p.id = ANY($1::int[])',
-      'h.vigente = true',
+      `(${sqlItinerarioVigenteEnFecha('h').trim()})`,
       'e.permisionario = true',
     ]
 

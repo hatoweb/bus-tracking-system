@@ -34,7 +34,9 @@ async function inspectParadasTables() {
       JOIN geometria.itinerario_parada ip ON ip.id_itinerario = h.id_itinerario
       JOIN geometria.paradas_oficiales p ON p.id = ip.id_parada
       WHERE e.cod_catalogo = 5
-        AND h.vigente = true
+        AND h.fecha_inicio_vigencia IS NOT NULL
+        AND h.fecha_inicio_vigencia <= CURRENT_DATE
+        AND (h.fecha_fin_vigencia IS NULL OR h.fecha_fin_vigencia >= CURRENT_DATE)
       ORDER BY h.id_itinerario, ip.orden ASC
       LIMIT 10;
     `);

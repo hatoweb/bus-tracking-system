@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 /**
  * Cruza paradas cercanas (IDs) con una empresa (cod_catalogo)
- * usando geometria.itinerario_parada + itinerarios vigentes.
+ * usando geometria.itinerario_parada + itinerarios vigentes por fecha.
  *
  * GET ?cod_catalogo=7&parada_ids=184,185,396
  */
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
       WHERE p.id = ANY($1::int[])
         AND e.cod_catalogo = $2
-        AND h.vigente = true
+        AND ${sqlItinerarioVigenteEnFecha('h')}
       ORDER BY p.id, ruta_linea
       `,
       [paradaIds, codCatalogo]

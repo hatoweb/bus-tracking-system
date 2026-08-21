@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 const GEO_ITINERARIOS_URL =
   process.env.GEO_ITINERARIOS_URL || 'http://host.docker.internal:8020'
@@ -69,7 +70,7 @@ async function fetchFromCid(paradaId: number, limit: number, distinct: boolean) 
     JOIN public.eots e ON e.cod_catalogo = cr.id_eot_catalogo
     WHERE ip.id_parada = $1
       AND e.permisionario = true
-      AND hi.vigente = true
+      AND ${sqlItinerarioVigenteEnFecha('hi')}
     ORDER BY distancia_m ASC NULLS LAST
     LIMIT $2
     `,

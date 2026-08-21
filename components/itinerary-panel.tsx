@@ -16,6 +16,7 @@ type RealItineraryFull = {
   id_itinerario: number
   ruta_hex: string
   fecha_inicio_vigencia: string
+  fecha_fin_vigencia?: string | null
   vigente: boolean
   observacion: string | null
   eot_id: number

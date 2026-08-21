@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
         h.id_itinerario,
         h.ruta_hex,
         h.fecha_inicio_vigencia,
+        h.fecha_fin_vigencia,
         h.vigente,
         h.observacion,
         e.eot_id,
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
       JOIN public.catalogo_rutas r ON LOWER(h.ruta_hex) = LOWER(r.ruta_hex)
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
       JOIN public.eots e ON r.id_eot_catalogo = e.cod_catalogo
-      WHERE h.vigente = true
+      WHERE ${sqlItinerarioVigenteEnFecha('h')}
     `
 
     const values: any[] = []
