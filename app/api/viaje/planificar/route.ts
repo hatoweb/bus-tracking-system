@@ -11,38 +11,19 @@ function parseIds(raw: string | null): number[] {
     .filter((n) => Number.isFinite(n))
 }
 
-function rowToLeg(row: any, leg: number): TripLeg {
-  return {
-    leg,
-    id_itinerario: Number(row.id_itinerario),
-    ruta_hex: String(row.ruta_hex || ''),
-    linea: row.linea != null ? String(row.linea) : null,
-    ramal: row.ramal != null ? String(row.ramal) : null,
-    eot_nombre: String(row.eot_nombre || ''),
-    cod_catalogo: Number(row.cod_catalogo),
-    boarding: {
-      id: Number(row.boarding_stop_id),
-      name: String(row.boarding_name || 'Parada'),
-      lat: row.boarding_lat != null ? Number(row.boarding_lat) : null,
-      lng: row.boarding_lng != null ? Number(row.boarding_lng) : null,
-    },
-    alighting: {
-      id: Number(row.alighting_stop_id),
-      name: String(row.alighting_name || 'Parada'),
-      lat: row.alighting_lat != null ? Number(row.alighting_lat) : null,
-      lng: row.alighting_lng != null ? Number(row.alighting_lng) : null,
-    },
-  }
+function stopLabel(alias: string): string {
+  return `COALESCE(NULLIF(BTRIM(CAST(${alias}.source_name AS text)), ''), CAST(${alias}.source_id AS text), 'Parada Oficial')`
 }
 
 /**
- * Planifica viaje origen→destino:
- * 1) Directo: un solo itinerario vigente une parada cercana al origen con una del destino.
- * 2) Transbordo: dos itinerarios distintos se unen en una parada común de cambio.
+ * Planifica viaje A → B:
+ * 1) Prioridad: un solo itinerario (shape) que pase por A y por B.
+ * 2) Si no hay directo: shapes(A) ∩ shapes(B) → punto C en la intersección,
+ *    ordenado por distancia A–C + C–B más corta.
  *
- * GET ?parada_ids_origen=1,2&parada_ids_destino=3,4
+ * GET ?parada_ids_origen=&parada_ids_destino=
  *     &lat_origen=&lng_origen=&lat_destino=&lng_destino=
- *     &cod_catalogo= (opcional)
+ *     &cod_catalogo= (opcional) &radio_m= (default 900)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -60,29 +41,35 @@ export async function GET(request: NextRequest) {
     const lngDestino = Number(searchParams.get('lng_destino'))
     const codCatalogoRaw = searchParams.get('cod_catalogo')
     const codCatalogo = codCatalogoRaw ? parseInt(codCatalogoRaw, 10) : null
+    const radioM = Math.min(
+      Math.max(parseInt(searchParams.get('radio_m') || '900', 10) || 900, 200),
+      2500
+    )
 
-    if (origenIds.length === 0 || destinoIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        direct: [],
-        transfers: [],
-        best: null,
-        message: 'Se requieren paradas cercanas al origen y al destino',
-      })
+    if (
+      !Number.isFinite(latOrigen) ||
+      !Number.isFinite(lngOrigen) ||
+      !Number.isFinite(latDestino) ||
+      !Number.isFinite(lngDestino)
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'lat/lng de origen y destino son obligatorios' },
+        { status: 400 }
+      )
     }
 
     const empresaFilter = Number.isFinite(codCatalogo)
       ? ` AND e.cod_catalogo = ${codCatalogo}`
       : ''
-    const empresaFilterLeg1 = Number.isFinite(codCatalogo)
-      ? ` AND e1.cod_catalogo = ${codCatalogo}`
-      : ''
 
-    const stopLabel = (alias: string) =>
-      `COALESCE(NULLIF(BTRIM(CAST(${alias}.source_name AS text)), ''), CAST(${alias}.source_id AS text), 'Parada Oficial')`
+    // ------------------------------------------------------------------
+    // 1) DIRECTO: un solo itinerario vigente que toca A y B
+    // ------------------------------------------------------------------
+    const hasStops = origenIds.length > 0 && destinoIds.length > 0
 
-    const directSql = `
-      SELECT DISTINCT ON (h.id_itinerario, p_o.id, p_d.id)
+    const directSql = hasStops
+      ? `
+      SELECT DISTINCT ON (h.id_itinerario)
         h.id_itinerario,
         h.ruta_hex,
         ${sqlNumeroLinea('ln')} AS linea,
@@ -100,146 +87,293 @@ export async function GET(request: NextRequest) {
         ROUND(
           ST_Distance(
             ST_Transform(p_o.geom, 4326)::geography,
-            ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography
+            ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
           )::numeric, 0
         ) AS dist_origen_m,
         ROUND(
           ST_Distance(
             ST_Transform(p_d.geom, 4326)::geography,
-            ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography
+            ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography
           )::numeric, 0
-        ) AS dist_destino_m
-      FROM geometria.paradas_oficiales p_o
-      JOIN geometria.itinerario_parada ip_o ON ip_o.id_parada = p_o.id
-      JOIN geometria.historico_itinerario h
-        ON h.id_itinerario = ip_o.id_itinerario AND h.vigente = true
+        ) AS dist_destino_m,
+        (ip_d.orden - ip_o.orden) AS hops
+      FROM geometria.historico_itinerario h
+      JOIN geometria.itinerario_parada ip_o ON ip_o.id_itinerario = h.id_itinerario
+      JOIN geometria.paradas_oficiales p_o ON p_o.id = ip_o.id_parada
       JOIN geometria.itinerario_parada ip_d
         ON ip_d.id_itinerario = h.id_itinerario AND ip_d.orden > ip_o.orden
       JOIN geometria.paradas_oficiales p_d ON p_d.id = ip_d.id_parada
       JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
       JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
-      WHERE p_o.id = ANY($1::int[])
+      WHERE h.vigente = true
+        AND h.geom IS NOT NULL
+        AND p_o.id = ANY($5::int[])
         AND p_d.id = ANY($6::int[])
         AND e.permisionario = true
         ${empresaFilter}
       ORDER BY
         h.id_itinerario,
-        p_o.id,
-        p_d.id,
+        hops ASC,
         dist_origen_m ASC,
         dist_destino_m ASC
-      LIMIT 20
+      LIMIT 30
+    `
+      : `
+      SELECT DISTINCT ON (h.id_itinerario)
+        h.id_itinerario,
+        h.ruta_hex,
+        ${sqlNumeroLinea('ln')} AS linea,
+        CAST(r.ramal AS text) AS ramal,
+        e.cod_catalogo,
+        e.eot_nombre,
+        NULL::int AS boarding_stop_id,
+        'Cerca del origen'::text AS boarding_name,
+        $1::float8 AS boarding_lat,
+        $2::float8 AS boarding_lng,
+        NULL::int AS alighting_stop_id,
+        'Cerca del destino'::text AS alighting_name,
+        $3::float8 AS alighting_lat,
+        $4::float8 AS alighting_lng,
+        ROUND(
+          ST_Distance(
+            ST_Transform(h.geom, 4326)::geography,
+            ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+          )::numeric, 0
+        ) AS dist_origen_m,
+        ROUND(
+          ST_Distance(
+            ST_Transform(h.geom, 4326)::geography,
+            ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography
+          )::numeric, 0
+        ) AS dist_destino_m,
+        0 AS hops
+      FROM geometria.historico_itinerario h
+      JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
+      ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
+      JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
+      WHERE h.vigente = true
+        AND h.geom IS NOT NULL
+        AND e.permisionario = true
+        AND ST_DWithin(
+          ST_Transform(h.geom, 4326)::geography,
+          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+          $5
+        )
+        AND ST_DWithin(
+          ST_Transform(h.geom, 4326)::geography,
+          ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
+          $5
+        )
+        ${empresaFilter}
+      ORDER BY
+        h.id_itinerario,
+        dist_origen_m ASC,
+        dist_destino_m ASC
+      LIMIT 30
     `
 
-    const directRes = await poolCID.query(directSql, [
-      origenIds,
-      latOrigen,
-      lngOrigen,
-      latDestino,
-      lngDestino,
-      destinoIds,
-    ])
+    const directParams = hasStops
+      ? [latOrigen, lngOrigen, latDestino, lngDestino, origenIds, destinoIds]
+      : [latOrigen, lngOrigen, latDestino, lngDestino, radioM]
 
-    const direct: TripPlanResult[] = directRes.rows.map((row: any) => ({
-      type: 'direct' as const,
-      legs: [rowToLeg(row, 1)],
-      score:
-        Number(row.dist_origen_m || 0) +
-        Number(row.dist_destino_m || 0),
-    }))
+    const directRes = await poolCID.query(directSql, directParams)
+
+    const direct: TripPlanResult[] = directRes.rows.map((row: any) => {
+      const leg: TripLeg = {
+        leg: 1,
+        id_itinerario: Number(row.id_itinerario),
+        ruta_hex: String(row.ruta_hex || ''),
+        linea: row.linea != null ? String(row.linea) : null,
+        ramal: row.ramal != null ? String(row.ramal) : null,
+        eot_nombre: String(row.eot_nombre || ''),
+        cod_catalogo: Number(row.cod_catalogo),
+        boarding: {
+          id: row.boarding_stop_id != null ? Number(row.boarding_stop_id) : 0,
+          name: String(row.boarding_name || 'Origen'),
+          lat: row.boarding_lat != null ? Number(row.boarding_lat) : latOrigen,
+          lng: row.boarding_lng != null ? Number(row.boarding_lng) : lngOrigen,
+        },
+        alighting: {
+          id: row.alighting_stop_id != null ? Number(row.alighting_stop_id) : 0,
+          name: String(row.alighting_name || 'Destino'),
+          lat: row.alighting_lat != null ? Number(row.alighting_lat) : latDestino,
+          lng: row.alighting_lng != null ? Number(row.alighting_lng) : lngDestino,
+        },
+      }
+      return {
+        type: 'direct' as const,
+        legs: [leg],
+        score:
+          Number(row.dist_origen_m || 0) +
+          Number(row.dist_destino_m || 0) +
+          Number(row.hops || 0) * 40,
+      }
+    })
     direct.sort((a, b) => a.score - b.score)
 
     let transfers: TripPlanResult[] = []
 
+    // ------------------------------------------------------------------
+    // 2) TRANSBORDO por intersección de shapes:
+    //    shapes que pasan cerca de A  ∩  shapes que pasan cerca de B
+    //    → punto C = intersección; orden por dist(A,C)+dist(C,B)
+    // ------------------------------------------------------------------
     if (direct.length === 0) {
       const transferSql = `
-        SELECT DISTINCT ON (h1.id_itinerario, h2.id_itinerario, p_o.id, p_t.id, p_d.id)
-          h1.id_itinerario AS leg1_itinerario,
-          h1.ruta_hex AS leg1_ruta_hex,
-          ${sqlNumeroLinea('ln1')} AS leg1_linea,
-          CAST(r1.ramal AS text) AS leg1_ramal,
-          e1.cod_catalogo AS leg1_cod_catalogo,
-          e1.eot_nombre AS leg1_eot_nombre,
-          p_o.id AS leg1_boarding_id,
-          ${stopLabel('p_o')} AS leg1_boarding_name,
-          ST_Y(ST_Transform(p_o.geom, 4326)) AS leg1_boarding_lat,
-          ST_X(ST_Transform(p_o.geom, 4326)) AS leg1_boarding_lng,
-          p_t.id AS transfer_stop_id,
-          ${stopLabel('p_t')} AS transfer_name,
-          ST_Y(ST_Transform(p_t.geom, 4326)) AS transfer_lat,
-          ST_X(ST_Transform(p_t.geom, 4326)) AS transfer_lng,
-          h2.id_itinerario AS leg2_itinerario,
-          h2.ruta_hex AS leg2_ruta_hex,
-          ${sqlNumeroLinea('ln2')} AS leg2_linea,
-          CAST(r2.ramal AS text) AS leg2_ramal,
-          e2.cod_catalogo AS leg2_cod_catalogo,
-          e2.eot_nombre AS leg2_eot_nombre,
-          p_d.id AS leg2_alighting_id,
-          ${stopLabel('p_d')} AS leg2_alighting_name,
-          ST_Y(ST_Transform(p_d.geom, 4326)) AS leg2_alighting_lat,
-          ST_X(ST_Transform(p_d.geom, 4326)) AS leg2_alighting_lng,
-          ROUND(
-            ST_Distance(
-              ST_Transform(p_o.geom, 4326)::geography,
-              ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography
-            )::numeric, 0
-          ) AS dist_origen_m,
-          ROUND(
-            ST_Distance(
-              ST_Transform(p_d.geom, 4326)::geography,
-              ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography
-            )::numeric, 0
-          ) AS dist_destino_m,
-          (ip_t1.orden - ip_o.orden + ip_d.orden - ip_t2.orden) AS hop_penalty
-        FROM geometria.paradas_oficiales p_o
-        JOIN geometria.itinerario_parada ip_o ON ip_o.id_parada = p_o.id
-        JOIN geometria.historico_itinerario h1
-          ON h1.id_itinerario = ip_o.id_itinerario AND h1.vigente = true
-        JOIN geometria.itinerario_parada ip_t1
-          ON ip_t1.id_itinerario = h1.id_itinerario AND ip_t1.orden > ip_o.orden
-        JOIN geometria.paradas_oficiales p_t ON p_t.id = ip_t1.id_parada
-        JOIN geometria.itinerario_parada ip_t2 ON ip_t2.id_parada = p_t.id
-        JOIN geometria.historico_itinerario h2
-          ON h2.id_itinerario = ip_t2.id_itinerario
-         AND h2.vigente = true
-         AND h2.id_itinerario <> h1.id_itinerario
-        JOIN geometria.itinerario_parada ip_d
-          ON ip_d.id_itinerario = h2.id_itinerario AND ip_d.orden > ip_t2.orden
-        JOIN geometria.paradas_oficiales p_d ON p_d.id = ip_d.id_parada
-        JOIN public.catalogo_rutas r1 ON LOWER(r1.ruta_hex) = LOWER(h1.ruta_hex)
-        ${sqlJoinLineaVigente('r1', 'lrc1', 'ln1')}
-        JOIN public.eots e1 ON e1.cod_catalogo = r1.id_eot_catalogo
-        JOIN public.catalogo_rutas r2 ON LOWER(r2.ruta_hex) = LOWER(h2.ruta_hex)
-        ${sqlJoinLineaVigente('r2', 'lrc2', 'ln2')}
-        JOIN public.eots e2 ON e2.cod_catalogo = r2.id_eot_catalogo
-        WHERE p_o.id = ANY($1::int[])
-          AND p_d.id = ANY($6::int[])
-          AND e1.permisionario = true
-          AND e2.permisionario = true
-          ${empresaFilterLeg1}
-        ORDER BY
-          h1.id_itinerario,
-          h2.id_itinerario,
-          p_o.id,
-          p_t.id,
-          p_d.id,
-          dist_origen_m ASC,
-          dist_destino_m ASC,
-          hop_penalty ASC
-        LIMIT 25
+        WITH pt_a AS (
+          SELECT ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography AS g,
+                 ST_SetSRID(ST_MakePoint($2, $1), 4326) AS geom
+        ),
+        pt_b AS (
+          SELECT ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography AS g,
+                 ST_SetSRID(ST_MakePoint($4, $3), 4326) AS geom
+        ),
+        shapes_a AS (
+          SELECT
+            h.id_itinerario,
+            h.ruta_hex,
+            ST_Transform(h.geom, 4326) AS geom4326,
+            ${sqlNumeroLinea('ln')} AS linea,
+            CAST(r.ramal AS text) AS ramal,
+            e.cod_catalogo,
+            e.eot_nombre
+          FROM geometria.historico_itinerario h
+          JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
+          ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
+          JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
+          CROSS JOIN pt_a
+          WHERE h.vigente = true
+            AND h.geom IS NOT NULL
+            AND e.permisionario = true
+            AND ST_DWithin(ST_Transform(h.geom, 4326)::geography, pt_a.g, $5)
+            ${empresaFilter}
+          ORDER BY ST_Distance(ST_Transform(h.geom, 4326)::geography, pt_a.g)
+          LIMIT 80
+        ),
+        shapes_b AS (
+          SELECT
+            h.id_itinerario,
+            h.ruta_hex,
+            ST_Transform(h.geom, 4326) AS geom4326,
+            ${sqlNumeroLinea('ln')} AS linea,
+            CAST(r.ramal AS text) AS ramal,
+            e.cod_catalogo,
+            e.eot_nombre
+          FROM geometria.historico_itinerario h
+          JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
+          ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
+          JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
+          CROSS JOIN pt_b
+          WHERE h.vigente = true
+            AND h.geom IS NOT NULL
+            AND e.permisionario = true
+            AND ST_DWithin(ST_Transform(h.geom, 4326)::geography, pt_b.g, $5)
+            ${empresaFilter}
+          ORDER BY ST_Distance(ST_Transform(h.geom, 4326)::geography, pt_b.g)
+          LIMIT 80
+        ),
+        pairs AS (
+          SELECT
+            a.id_itinerario AS leg1_itinerario,
+            a.ruta_hex AS leg1_ruta_hex,
+            a.linea AS leg1_linea,
+            a.ramal AS leg1_ramal,
+            a.cod_catalogo AS leg1_cod_catalogo,
+            a.eot_nombre AS leg1_eot_nombre,
+            a.geom4326 AS geom_a,
+            b.id_itinerario AS leg2_itinerario,
+            b.ruta_hex AS leg2_ruta_hex,
+            b.linea AS leg2_linea,
+            b.ramal AS leg2_ramal,
+            b.cod_catalogo AS leg2_cod_catalogo,
+            b.eot_nombre AS leg2_eot_nombre,
+            b.geom4326 AS geom_b,
+            -- Punto C: intersección (o punto más cercano si se tocan)
+            CASE
+              WHEN ST_IsEmpty(ST_Intersection(a.geom4326, b.geom4326)) THEN
+                ST_ClosestPoint(a.geom4326, b.geom4326)
+              WHEN ST_GeometryType(ST_Intersection(a.geom4326, b.geom4326))
+                   IN ('ST_Point', 'ST_MultiPoint') THEN
+                ST_GeometryN(
+                  ST_CollectionExtract(ST_Intersection(a.geom4326, b.geom4326), 1),
+                  1
+                )
+              ELSE
+                ST_PointOnSurface(ST_Intersection(a.geom4326, b.geom4326))
+            END AS c_geom
+          FROM shapes_a a
+          JOIN shapes_b b
+            ON a.id_itinerario <> b.id_itinerario
+           AND (
+             ST_Intersects(a.geom4326, b.geom4326)
+             OR ST_DWithin(a.geom4326::geography, b.geom4326::geography, 80)
+           )
+        ),
+        scored AS (
+          SELECT
+            p.*,
+            ST_Y(p.c_geom) AS transfer_lat,
+            ST_X(p.c_geom) AS transfer_lng,
+            ROUND(
+              ST_Distance(p.c_geom::geography, (SELECT g FROM pt_a))::numeric, 0
+            ) AS dist_a_c_m,
+            ROUND(
+              ST_Distance(p.c_geom::geography, (SELECT g FROM pt_b))::numeric, 0
+            ) AS dist_c_b_m
+          FROM pairs p
+          WHERE p.c_geom IS NOT NULL AND NOT ST_IsEmpty(p.c_geom)
+        )
+        SELECT
+          s.*,
+          (s.dist_a_c_m + s.dist_c_b_m) AS total_m,
+          ns.id AS transfer_stop_id,
+          ${stopLabel('ns')} AS transfer_name,
+          ST_Y(ST_Transform(ns.geom, 4326)) AS nearest_stop_lat,
+          ST_X(ST_Transform(ns.geom, 4326)) AS nearest_stop_lng
+        FROM scored s
+        LEFT JOIN LATERAL (
+          SELECT p.id, p.source_name, p.source_id, p.geom
+          FROM geometria.paradas_oficiales p
+          WHERE p.geom IS NOT NULL
+          ORDER BY ST_Transform(p.geom, 4326)::geography <-> s.c_geom::geography
+          LIMIT 1
+        ) ns ON true
+        ORDER BY total_m ASC, dist_a_c_m ASC
+        LIMIT 40
       `
 
+      // Note: empresaFilter uses alias `e` which exists in shapes_a/b CTEs
       const transferRes = await poolCID.query(transferSql, [
-        origenIds,
         latOrigen,
         lngOrigen,
         latDestino,
         lngDestino,
-        destinoIds,
+        radioM,
       ])
 
-      transfers = transferRes.rows.map((row: any) => {
+      // Deduplicate by (leg1, leg2, transfer rounded)
+      const seen = new Set<string>()
+      for (const row of transferRes.rows) {
+        const key = `${row.leg1_itinerario}|${row.leg2_itinerario}|${Number(row.transfer_lat).toFixed(4)}|${Number(row.transfer_lng).toFixed(4)}`
+        if (seen.has(key)) continue
+        seen.add(key)
+
+        const cLat =
+          row.nearest_stop_lat != null
+            ? Number(row.nearest_stop_lat)
+            : Number(row.transfer_lat)
+        const cLng =
+          row.nearest_stop_lng != null
+            ? Number(row.nearest_stop_lng)
+            : Number(row.transfer_lng)
+        const cName = String(row.transfer_name || 'Punto de transbordo')
+        const cId =
+          row.transfer_stop_id != null ? Number(row.transfer_stop_id) : 0
+
+        const distAC = Number(row.dist_a_c_m || 0)
+        const distCB = Number(row.dist_c_b_m || 0)
+
         const leg1: TripLeg = {
           leg: 1,
           id_itinerario: Number(row.leg1_itinerario),
@@ -249,22 +383,16 @@ export async function GET(request: NextRequest) {
           eot_nombre: String(row.leg1_eot_nombre || ''),
           cod_catalogo: Number(row.leg1_cod_catalogo),
           boarding: {
-            id: Number(row.leg1_boarding_id),
-            name: String(row.leg1_boarding_name || 'Parada'),
-            lat:
-              row.leg1_boarding_lat != null
-                ? Number(row.leg1_boarding_lat)
-                : null,
-            lng:
-              row.leg1_boarding_lng != null
-                ? Number(row.leg1_boarding_lng)
-                : null,
+            id: origenIds[0] || 0,
+            name: 'Origen (A)',
+            lat: latOrigen,
+            lng: lngOrigen,
           },
           alighting: {
-            id: Number(row.transfer_stop_id),
-            name: String(row.transfer_name || 'Transbordo'),
-            lat: row.transfer_lat != null ? Number(row.transfer_lat) : null,
-            lng: row.transfer_lng != null ? Number(row.transfer_lng) : null,
+            id: cId,
+            name: cName,
+            lat: cLat,
+            lng: cLng,
           },
         }
         const leg2: TripLeg = {
@@ -276,53 +404,53 @@ export async function GET(request: NextRequest) {
           eot_nombre: String(row.leg2_eot_nombre || ''),
           cod_catalogo: Number(row.leg2_cod_catalogo),
           boarding: {
-            id: Number(row.transfer_stop_id),
-            name: String(row.transfer_name || 'Transbordo'),
-            lat: row.transfer_lat != null ? Number(row.transfer_lat) : null,
-            lng: row.transfer_lng != null ? Number(row.transfer_lng) : null,
+            id: cId,
+            name: cName,
+            lat: cLat,
+            lng: cLng,
           },
           alighting: {
-            id: Number(row.leg2_alighting_id),
-            name: String(row.leg2_alighting_name || 'Parada'),
-            lat:
-              row.leg2_alighting_lat != null
-                ? Number(row.leg2_alighting_lat)
-                : null,
-            lng:
-              row.leg2_alighting_lng != null
-                ? Number(row.leg2_alighting_lng)
-                : null,
+            id: destinoIds[0] || 0,
+            name: 'Destino (B)',
+            lat: latDestino,
+            lng: lngDestino,
           },
         }
-        return {
-          type: 'transfer' as const,
+
+        transfers.push({
+          type: 'transfer',
           legs: [leg1, leg2],
           transfer: {
-            id: Number(row.transfer_stop_id),
-            name: String(row.transfer_name || 'Transbordo'),
-            lat: row.transfer_lat != null ? Number(row.transfer_lat) : null,
-            lng: row.transfer_lng != null ? Number(row.transfer_lng) : null,
+            id: cId,
+            name: cName,
+            lat: cLat,
+            lng: cLng,
+            dist_a_c_m: distAC,
+            dist_c_b_m: distCB,
+            total_m: distAC + distCB,
           },
-          score:
-            Number(row.dist_origen_m || 0) +
-            Number(row.dist_destino_m || 0) +
-            Number(row.hop_penalty || 0) * 80,
-        }
-      })
+          score: distAC + distCB,
+        })
+      }
       transfers.sort((a, b) => a.score - b.score)
     }
 
-    const best: TripPlanResult | null =
-      direct[0] || transfers[0] || null
+    const best: TripPlanResult | null = direct[0] || transfers[0] || null
 
     return NextResponse.json({
       success: true,
+      mode: direct.length > 0 ? 'direct' : transfers.length > 0 ? 'transfer' : 'none',
       direct,
       transfers,
       best,
       query: {
         origenIds,
         destinoIds,
+        lat_origen: latOrigen,
+        lng_origen: lngOrigen,
+        lat_destino: latDestino,
+        lng_destino: lngDestino,
+        radio_m: radioM,
         cod_catalogo: codCatalogo,
       },
     })

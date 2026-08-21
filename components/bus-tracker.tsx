@@ -324,20 +324,13 @@ export function BusTracker() {
           setRealBuses(dataBuses.data)
         }
         if (dataItin.success && dataItin.data) {
-          allItinerariesRef.current = dataItin.data
-          if (selectedCodCatalogo && matchingItinerarioIds.length > 0) {
-            const allow = new Set(matchingItinerarioIds)
-            setRealItineraries(
-              dataItin.data.filter((it: RealItinerary) =>
-                allow.has(Number(it.id_itinerario))
-              )
-            )
-          } else if (selectedCodCatalogo && empresaPasaPorCercanas === false) {
-            setRealItineraries([])
-          } else if (!selectedCodCatalogo || nearbyStops.length === 0) {
-            setRealItineraries(selectedCodCatalogo ? dataItin.data : [])
-          } else {
+          if (selectedCodCatalogo) {
+            allItinerariesRef.current = dataItin.data
+            // Con empresa elegida: mostrar TODAS sus líneas/itinerarios en el mapa
             setRealItineraries(dataItin.data)
+          } else if (!tripPlan) {
+            allItinerariesRef.current = []
+            setRealItineraries([])
           }
         }
         setRealStops([])
@@ -358,6 +351,7 @@ export function BusTracker() {
     nearbyStops.length,
     selectedBoardingStopId,
     tripBusFilter,
+    tripPlan,
     user?.lat,
     user?.lng,
   ])
@@ -569,17 +563,9 @@ export function BusTracker() {
           }))
         )
 
-        // Filtrar itinerarios ya cargados
-        const all = allItinerariesRef.current
-        if (data.passes && data.matching_itinerario_ids?.length) {
-          const allow = new Set(
-            data.matching_itinerario_ids.map((id: number) => Number(id))
-          )
-          setRealItineraries(
-            all.filter((it) => allow.has(Number(it.id_itinerario)))
-          )
-        } else {
-          setRealItineraries([])
+        // Mantener visibles todos los itinerarios de la empresa (no filtrar por cercanas)
+        if (allItinerariesRef.current.length > 0) {
+          setRealItineraries(allItinerariesRef.current)
         }
 
         const emp = empresas.find(
@@ -721,6 +707,29 @@ export function BusTracker() {
           if (planData?.success && planData.best) {
             computedPlan = planData.best as TripPlanResult
             setTripPlan(computedPlan)
+            // Dibujar en el mapa los shapes del plan (1 o 2 itinerarios)
+            const planItinIds = [
+              ...new Set(
+                (computedPlan.legs || [])
+                  .map((l) => Number(l.id_itinerario))
+                  .filter((n) => Number.isFinite(n) && n > 0)
+              ),
+            ]
+            if (planItinIds.length > 0) {
+              try {
+                const itinPlanRes = await fetch(
+                  apiUrl(`/api/itinerarios?ids=${planItinIds.join(",")}`),
+                  { cache: "no-store" }
+                )
+                const itinPlanData = await itinPlanRes.json()
+                if (itinPlanData?.success && Array.isArray(itinPlanData.data)) {
+                  setRealItineraries(itinPlanData.data)
+                  allItinerariesRef.current = itinPlanData.data
+                }
+              } catch (err) {
+                console.error("Error cargando shapes del plan:", err)
+              }
+            }
           } else {
             setTripPlan(null)
           }
@@ -2292,9 +2301,23 @@ export function BusTracker() {
 
               {tripPlan && tripPlan.type === "transfer" && (
                 <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-3 shadow-sm">
-                  <h3 className="mb-2 text-sm font-semibold text-violet-950">
-                    Viaje con transbordo (2 itinerarios)
+                  <h3 className="mb-1 text-sm font-semibold text-violet-950">
+                    Transbordo · 2 itinerarios (punto C)
                   </h3>
+                  {tripPlan.transfer && (
+                    <p className="mb-2 text-[11px] text-violet-900">
+                      Cambiá en <strong>{tripPlan.transfer.name}</strong>
+                      {tripPlan.transfer.total_m != null && (
+                        <>
+                          {" "}
+                          · A→C{" "}
+                          {Math.round(tripPlan.transfer.dist_a_c_m || 0)} m + C→B{" "}
+                          {Math.round(tripPlan.transfer.dist_c_b_m || 0)} m ={" "}
+                          <strong>{Math.round(tripPlan.transfer.total_m)} m</strong>
+                        </>
+                      )}
+                    </p>
+                  )}
                   <ol className="flex flex-col gap-2 text-[11px] text-violet-950">
                     {tripPlan.legs.map((leg) => (
                       <li
@@ -2315,11 +2338,24 @@ export function BusTracker() {
                       </li>
                     ))}
                   </ol>
-                  {tripPlan.transfer && (
-                    <p className="mt-2 text-[11px] font-semibold text-violet-900">
-                      Cambiá en: {tripPlan.transfer.name}
-                    </p>
-                  )}
+                </div>
+              )}
+
+              {tripPlan && tripPlan.type === "direct" && tripPlan.legs[0] && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 shadow-sm">
+                  <h3 className="mb-1 text-sm font-semibold text-emerald-950">
+                    Viaje directo · 1 itinerario
+                  </h3>
+                  <p className="text-[11px] text-emerald-950">
+                    <strong>
+                      {tripPlan.legs[0].linea
+                        ? `Línea ${tripPlan.legs[0].linea}`
+                        : tripPlan.legs[0].eot_nombre}
+                    </strong>
+                    {" · "}
+                    Subí: {tripPlan.legs[0].boarding.name} → Bajá:{" "}
+                    {tripPlan.legs[0].alighting.name}
+                  </p>
                 </div>
               )}
 

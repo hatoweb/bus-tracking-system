@@ -7,8 +7,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const codCatalogo = searchParams.get('cod_catalogo')
     const eotId = searchParams.get('eot_id')
+    const idsRaw = searchParams.get('ids') || ''
+    const ids = idsRaw
+      .split(',')
+      .map((x) => parseInt(x.trim(), 10))
+      .filter((n) => Number.isFinite(n))
 
-    if (!codCatalogo && !eotId) {
+    if (!codCatalogo && !eotId && ids.length === 0) {
       return NextResponse.json({ success: true, count: 0, data: [] })
     }
 
@@ -36,7 +41,10 @@ export async function GET(request: NextRequest) {
 
     const values: any[] = []
 
-    if (codCatalogo) {
+    if (ids.length > 0) {
+      values.push(ids)
+      query += ` AND h.id_itinerario = ANY($${values.length}::int[])`
+    } else if (codCatalogo) {
       values.push(parseInt(codCatalogo))
       query += ` AND e.cod_catalogo = $${values.length}`
     } else if (eotId) {
@@ -44,7 +52,7 @@ export async function GET(request: NextRequest) {
       query += ` AND e.eot_id = $${values.length}`
     }
 
-    query += ` ORDER BY e.eot_nombre ASC, h.id_itinerario DESC LIMIT 50;`
+    query += ` ORDER BY e.eot_nombre ASC, h.id_itinerario DESC LIMIT 120;`
 
     const result = await poolCID.query(query, values)
 
