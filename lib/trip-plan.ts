@@ -35,6 +35,8 @@ export type TripPlanResult = {
     total_m?: number
   }
   score: number
+  /** Posición en la lista de opciones (1 = mejor) */
+  rank?: number
 }
 
 export function formatTripPlanSummary(plan: TripPlanResult): string {
@@ -42,7 +44,7 @@ export function formatTripPlanSummary(plan: TripPlanResult): string {
     const l = plan.legs[0]
     const lineLabel = l.linea ? `L${l.linea}` : l.eot_nombre
     return (
-      `Viaje directo (1 itinerario) · ${lineLabel} (${l.eot_nombre}). ` +
+      `Opción directa (1 itinerario · sentido A→B) · ${lineLabel} (${l.eot_nombre}). ` +
       `Subí en ${l.boarding.name}; bajá en ${l.alighting.name}.`
     )
   }
@@ -58,11 +60,29 @@ export function formatTripPlanSummary(plan: TripPlanResult): string {
         ? ` · C→B ${Math.round(plan.transfer.dist_c_b_m)} m`
         : ''
     return (
-      `Viaje con transbordo en ${t} (punto C).` +
+      `Opción con transbordo en ${t} (sentido A→C→B).` +
       (ac || cb ? `${ac}${cb}.` : ' ') +
       ` 1) ${a.linea ? `L${a.linea}` : a.eot_nombre}: ${a.boarding.name} → ${a.alighting.name}.` +
       ` 2) ${b.linea ? `L${b.linea}` : b.eot_nombre}: ${b.boarding.name} → ${b.alighting.name}.`
     )
   }
   return 'Plan de viaje calculado.'
+}
+
+/** Hasta 3 opciones: primero directos, luego transbordos más cortos. */
+export function buildTripOptions(
+  direct: TripPlanResult[],
+  transfers: TripPlanResult[],
+  limit = 3
+): TripPlanResult[] {
+  const out: TripPlanResult[] = []
+  for (const d of direct) {
+    if (out.length >= limit) break
+    out.push(d)
+  }
+  for (const t of transfers) {
+    if (out.length >= limit) break
+    out.push(t)
+  }
+  return out.map((p, i) => ({ ...p, rank: i + 1 }))
 }

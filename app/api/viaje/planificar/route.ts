@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cidConfigError, poolCID } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
-import type { TripLeg, TripPlanResult } from '@/lib/trip-plan'
+import {
+  buildTripOptions,
+  type TripLeg,
+  type TripPlanResult,
+} from '@/lib/trip-plan'
 
 function parseIds(raw: string | null): number[] {
   if (!raw) return []
@@ -16,14 +20,38 @@ function stopLabel(alias: string): string {
 }
 
 /**
- * Planifica viaje A → B:
- * 1) Prioridad: un solo itinerario (shape) que pase por A y por B.
- * 2) Si no hay directo: shapes(A) ∩ shapes(B) → punto C en la intersección,
- *    ordenado por distancia A–C + C–B más corta.
+ * Fracción 0..1 de un punto sobre el shape (sentido del LineString).
+ * Si el merge da MultiLineString, usa el segmento más cercano al punto.
+ */
+function sqlLocateFraction(geom4326Expr: string, lonParam: string, latParam: string): string {
+  return `
+    (
+      SELECT ST_LineLocatePoint(seg.geom, ST_SetSRID(ST_MakePoint(${lonParam}, ${latParam}), 4326))
+      FROM (
+        SELECT (ST_Dump(
+          CASE
+            WHEN ST_GeometryType(ST_LineMerge(${geom4326Expr})) = 'ST_LineString'
+              THEN ST_LineMerge(${geom4326Expr})
+            ELSE ST_LineMerge(${geom4326Expr})
+          END
+        )).geom AS geom
+      ) seg
+      ORDER BY ST_Distance(
+        seg.geom::geography,
+        ST_SetSRID(ST_MakePoint(${lonParam}, ${latParam}), 4326)::geography
+      )
+      LIMIT 1
+    )
+  `
+}
+
+/**
+ * Planifica viaje A → B respetando el sentido del shape (A→B, no B→A).
  *
- * GET ?parada_ids_origen=&parada_ids_destino=
- *     &lat_origen=&lng_origen=&lat_destino=&lng_destino=
- *     &cod_catalogo= (opcional) &radio_m= (default 900)
+ * Opciones (hasta 3):
+ *  1) Primero: un solo itinerario en sentido A→B
+ *  2) Siguientes: transbordo (shapes A∩B → punto C) con sentido A→C y C→B,
+ *     ordenados por A–C + C–B más cortos
  */
 export async function GET(request: NextRequest) {
   try {
@@ -45,6 +73,10 @@ export async function GET(request: NextRequest) {
       Math.max(parseInt(searchParams.get('radio_m') || '900', 10) || 900, 200),
       2500
     )
+    const maxOptions = Math.min(
+      Math.max(parseInt(searchParams.get('limit') || '3', 10) || 3, 1),
+      5
+    )
 
     if (
       !Number.isFinite(latOrigen) ||
@@ -62,8 +94,11 @@ export async function GET(request: NextRequest) {
       ? ` AND e.cod_catalogo = ${codCatalogo}`
       : ''
 
+    const fracA = sqlLocateFraction('ST_Transform(h.geom, 4326)', '$2', '$1')
+    const fracB = sqlLocateFraction('ST_Transform(h.geom, 4326)', '$4', '$3')
+
     // ------------------------------------------------------------------
-    // 1) DIRECTO: un solo itinerario vigente que toca A y B
+    // 1) DIRECTO: un solo itinerario en sentido A → B
     // ------------------------------------------------------------------
     const hasStops = origenIds.length > 0 && destinoIds.length > 0
 
@@ -96,7 +131,9 @@ export async function GET(request: NextRequest) {
             ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography
           )::numeric, 0
         ) AS dist_destino_m,
-        (ip_d.orden - ip_o.orden) AS hops
+        (ip_d.orden - ip_o.orden) AS hops,
+        ${fracA} AS frac_a,
+        ${fracB} AS frac_b
       FROM geometria.historico_itinerario h
       JOIN geometria.itinerario_parada ip_o ON ip_o.id_itinerario = h.id_itinerario
       JOIN geometria.paradas_oficiales p_o ON p_o.id = ip_o.id_parada
@@ -112,12 +149,14 @@ export async function GET(request: NextRequest) {
         AND p_d.id = ANY($6::int[])
         AND e.permisionario = true
         ${empresaFilter}
+        -- Sentido del shape: A aparece antes que B en el LineString
+        AND COALESCE(${fracA}, 0) < COALESCE(${fracB}, 1)
       ORDER BY
         h.id_itinerario,
         hops ASC,
         dist_origen_m ASC,
         dist_destino_m ASC
-      LIMIT 30
+      LIMIT 20
     `
       : `
       SELECT DISTINCT ON (h.id_itinerario)
@@ -147,7 +186,9 @@ export async function GET(request: NextRequest) {
             ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography
           )::numeric, 0
         ) AS dist_destino_m,
-        0 AS hops
+        0 AS hops,
+        ${fracA} AS frac_a,
+        ${fracB} AS frac_b
       FROM geometria.historico_itinerario h
       JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
@@ -165,12 +206,13 @@ export async function GET(request: NextRequest) {
           ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
           $5
         )
+        AND COALESCE(${fracA}, 0) < COALESCE(${fracB}, 1)
         ${empresaFilter}
       ORDER BY
         h.id_itinerario,
         dist_origen_m ASC,
         dist_destino_m ASC
-      LIMIT 30
+      LIMIT 20
     `
 
     const directParams = hasStops
@@ -179,47 +221,57 @@ export async function GET(request: NextRequest) {
 
     const directRes = await poolCID.query(directSql, directParams)
 
-    const direct: TripPlanResult[] = directRes.rows.map((row: any) => {
-      const leg: TripLeg = {
-        leg: 1,
-        id_itinerario: Number(row.id_itinerario),
-        ruta_hex: String(row.ruta_hex || ''),
-        linea: row.linea != null ? String(row.linea) : null,
-        ramal: row.ramal != null ? String(row.ramal) : null,
-        eot_nombre: String(row.eot_nombre || ''),
-        cod_catalogo: Number(row.cod_catalogo),
-        boarding: {
-          id: row.boarding_stop_id != null ? Number(row.boarding_stop_id) : 0,
-          name: String(row.boarding_name || 'Origen'),
-          lat: row.boarding_lat != null ? Number(row.boarding_lat) : latOrigen,
-          lng: row.boarding_lng != null ? Number(row.boarding_lng) : lngOrigen,
-        },
-        alighting: {
-          id: row.alighting_stop_id != null ? Number(row.alighting_stop_id) : 0,
-          name: String(row.alighting_name || 'Destino'),
-          lat: row.alighting_lat != null ? Number(row.alighting_lat) : latDestino,
-          lng: row.alighting_lng != null ? Number(row.alighting_lng) : lngDestino,
-        },
-      }
-      return {
-        type: 'direct' as const,
-        legs: [leg],
-        score:
-          Number(row.dist_origen_m || 0) +
-          Number(row.dist_destino_m || 0) +
-          Number(row.hops || 0) * 40,
-      }
-    })
+    const direct: TripPlanResult[] = directRes.rows
+      .filter((row: any) => {
+        const fa = Number(row.frac_a)
+        const fb = Number(row.frac_b)
+        // Doble check sentido A→B
+        if (Number.isFinite(fa) && Number.isFinite(fb) && fa >= fb) return false
+        return true
+      })
+      .map((row: any) => {
+        const leg: TripLeg = {
+          leg: 1,
+          id_itinerario: Number(row.id_itinerario),
+          ruta_hex: String(row.ruta_hex || ''),
+          linea: row.linea != null ? String(row.linea) : null,
+          ramal: row.ramal != null ? String(row.ramal) : null,
+          eot_nombre: String(row.eot_nombre || ''),
+          cod_catalogo: Number(row.cod_catalogo),
+          boarding: {
+            id: row.boarding_stop_id != null ? Number(row.boarding_stop_id) : 0,
+            name: String(row.boarding_name || 'Origen'),
+            lat: row.boarding_lat != null ? Number(row.boarding_lat) : latOrigen,
+            lng: row.boarding_lng != null ? Number(row.boarding_lng) : lngOrigen,
+          },
+          alighting: {
+            id: row.alighting_stop_id != null ? Number(row.alighting_stop_id) : 0,
+            name: String(row.alighting_name || 'Destino'),
+            lat:
+              row.alighting_lat != null ? Number(row.alighting_lat) : latDestino,
+            lng:
+              row.alighting_lng != null ? Number(row.alighting_lng) : lngDestino,
+          },
+        }
+        return {
+          type: 'direct' as const,
+          legs: [leg],
+          score:
+            Number(row.dist_origen_m || 0) +
+            Number(row.dist_destino_m || 0) +
+            Number(row.hops || 0) * 40,
+        }
+      })
     direct.sort((a, b) => a.score - b.score)
 
-    let transfers: TripPlanResult[] = []
+    // ------------------------------------------------------------------
+    // 2) TRANSBORDO: shapes(A) ∩ shapes(B) → C, sentido A→C y C→B
+    //    Siempre se calcula para completar hasta N opciones.
+    // ------------------------------------------------------------------
+    const transfers: TripPlanResult[] = []
+    const needTransfers = direct.length < maxOptions
 
-    // ------------------------------------------------------------------
-    // 2) TRANSBORDO por intersección de shapes:
-    //    shapes que pasan cerca de A  ∩  shapes que pasan cerca de B
-    //    → punto C = intersección; orden por dist(A,C)+dist(C,B)
-    // ------------------------------------------------------------------
-    if (direct.length === 0) {
+    if (needTransfers) {
       const transferSql = `
         WITH pt_a AS (
           SELECT ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography AS g,
@@ -289,7 +341,6 @@ export async function GET(request: NextRequest) {
             b.cod_catalogo AS leg2_cod_catalogo,
             b.eot_nombre AS leg2_eot_nombre,
             b.geom4326 AS geom_b,
-            -- Punto C: intersección (o punto más cercano si se tocan)
             CASE
               WHEN ST_IsEmpty(ST_Intersection(a.geom4326, b.geom4326)) THEN
                 ST_ClosestPoint(a.geom4326, b.geom4326)
@@ -320,7 +371,12 @@ export async function GET(request: NextRequest) {
             ) AS dist_a_c_m,
             ROUND(
               ST_Distance(p.c_geom::geography, (SELECT g FROM pt_b))::numeric, 0
-            ) AS dist_c_b_m
+            ) AS dist_c_b_m,
+            -- Sentido A→C en shape 1 y C→B en shape 2
+            ${sqlLocateFraction('p.geom_a', '$2', '$1')} AS frac_a_on_1,
+            ${sqlLocateFraction('p.geom_a', 'ST_X(p.c_geom)', 'ST_Y(p.c_geom)')} AS frac_c_on_1,
+            ${sqlLocateFraction('p.geom_b', 'ST_X(p.c_geom)', 'ST_Y(p.c_geom)')} AS frac_c_on_2,
+            ${sqlLocateFraction('p.geom_b', '$4', '$3')} AS frac_b_on_2
           FROM pairs p
           WHERE p.c_geom IS NOT NULL AND NOT ST_IsEmpty(p.c_geom)
         )
@@ -339,11 +395,12 @@ export async function GET(request: NextRequest) {
           ORDER BY ST_Transform(p.geom, 4326)::geography <-> s.c_geom::geography
           LIMIT 1
         ) ns ON true
+        WHERE COALESCE(s.frac_a_on_1, 0) < COALESCE(s.frac_c_on_1, 1)
+          AND COALESCE(s.frac_c_on_2, 0) < COALESCE(s.frac_b_on_2, 1)
         ORDER BY total_m ASC, dist_a_c_m ASC
         LIMIT 40
       `
 
-      // Note: empresaFilter uses alias `e` which exists in shapes_a/b CTEs
       const transferRes = await poolCID.query(transferSql, [
         latOrigen,
         lngOrigen,
@@ -352,7 +409,6 @@ export async function GET(request: NextRequest) {
         radioM,
       ])
 
-      // Deduplicate by (leg1, leg2, transfer rounded)
       const seen = new Set<string>()
       for (const row of transferRes.rows) {
         const key = `${row.leg1_itinerario}|${row.leg2_itinerario}|${Number(row.transfer_lat).toFixed(4)}|${Number(row.transfer_lng).toFixed(4)}`
@@ -435,11 +491,13 @@ export async function GET(request: NextRequest) {
       transfers.sort((a, b) => a.score - b.score)
     }
 
-    const best: TripPlanResult | null = direct[0] || transfers[0] || null
+    const options = buildTripOptions(direct, transfers, maxOptions)
+    const best = options[0] || null
 
     return NextResponse.json({
       success: true,
-      mode: direct.length > 0 ? 'direct' : transfers.length > 0 ? 'transfer' : 'none',
+      mode: best?.type || 'none',
+      options,
       direct,
       transfers,
       best,
@@ -452,6 +510,8 @@ export async function GET(request: NextRequest) {
         lng_destino: lngDestino,
         radio_m: radioM,
         cod_catalogo: codCatalogo,
+        limit: maxOptions,
+        sense: 'A→B only',
       },
     })
   } catch (error: any) {

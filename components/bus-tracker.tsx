@@ -209,6 +209,7 @@ export function BusTracker() {
   >([])
   const [tripSummary, setTripSummary] = useState<string | null>(null)
   const [tripPlan, setTripPlan] = useState<TripPlanResult | null>(null)
+  const [tripOptions, setTripOptions] = useState<TripPlanResult[]>([])
   const [destNearbyStops, setDestNearbyStops] = useState<NearbyStop[]>([])
   const [tripGuidance, setTripGuidance] = useState<{
     mode: "walk_to_stop" | "to_destination"
@@ -630,6 +631,7 @@ export function BusTracker() {
       setTripSuggestions([])
       setTripSummary(null)
       setTripPlan(null)
+      setTripOptions([])
       setDestNearbyStops([])
       setTripGuidance(null)
       setTripRouteCoords(null)
@@ -700,14 +702,22 @@ export function BusTracker() {
               `&parada_ids_destino=${destIds.join(",")}` +
               `&lat_origen=${plan.origin.lat}&lng_origen=${plan.origin.lng}` +
               `&lat_destino=${plan.destination.lat}&lng_destino=${plan.destination.lng}` +
+              `&limit=3` +
               (plan.codCatalogo ? `&cod_catalogo=${plan.codCatalogo}` : "")
           )
           const planRes = await fetch(planUrl, { cache: "no-store" })
           const planData = await planRes.json()
-          if (planData?.success && planData.best) {
-            computedPlan = planData.best as TripPlanResult
+          const opts: TripPlanResult[] = Array.isArray(planData?.options)
+            ? planData.options
+            : planData?.best
+              ? [planData.best]
+              : []
+          setTripOptions(opts)
+          if (planData?.success && opts.length > 0) {
+            computedPlan = opts[0]
             setTripPlan(computedPlan)
-            // Dibujar en el mapa los shapes del plan (1 o 2 itinerarios)
+            setTripSummary(formatTripPlanSummary(computedPlan))
+            speak(formatTripPlanSummary(computedPlan), { force: true })
             const planItinIds = [
               ...new Set(
                 (computedPlan.legs || [])
@@ -732,10 +742,12 @@ export function BusTracker() {
             }
           } else {
             setTripPlan(null)
+            setTripOptions([])
           }
         } catch (err) {
           console.error("Error planificando tramos:", err)
           setTripPlan(null)
+          setTripOptions([])
         }
 
         const sugUrl = apiUrl(
@@ -1173,11 +1185,11 @@ export function BusTracker() {
           .filter((s) => s.isBoardingRecommended)
           .map((s) => s.source_name)
 
-        const keepTransferSummary = computedPlan?.type === "transfer"
+        const keepPlanSummary = Boolean(computedPlan)
 
         if (displayStops.length === 0) {
           setNearbyStops([])
-          if (!keepTransferSummary) {
+          if (!keepPlanSummary) {
             setTripSummary(
               `No hay paradas cercanas a tu ubicación con las líneas/empresas de la bajada en ${plan.destination.label}` +
                 (alightHintName ? ` (${alightHintName}).` : ".") +
@@ -1225,7 +1237,7 @@ export function BusTracker() {
             boardingNames,
             targetStopName: target.source_name,
           })
-          if (!keepTransferSummary) {
+          if (!keepPlanSummary) {
             setTripSummary(
               `Paradas cerca tuyo que llegan a ${plan.destination.label} (vía bajada #${alightHintRank}). ` +
                 `Parada recomendada: #${target.rank}` +
@@ -1287,7 +1299,7 @@ export function BusTracker() {
               : destTarget
                 ? ` Bajá en #${destTarget.rank} (${destTarget.source_name}).`
                 : ""
-          if (!keepTransferSummary) {
+          if (!keepPlanSummary) {
             setTripSummary(
               `Estás en la parada correcta (#${nearest?.rank}). ` +
                 (toDest
@@ -2299,63 +2311,127 @@ export function BusTracker() {
                 </div>
               )}
 
-              {tripPlan && tripPlan.type === "transfer" && (
-                <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-3 shadow-sm">
-                  <h3 className="mb-1 text-sm font-semibold text-violet-950">
-                    Transbordo · 2 itinerarios (punto C)
+              {tripOptions.length > 0 && (
+                <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+                  <h3 className="mb-1 text-sm font-semibold text-foreground">
+                    Opciones de viaje (hasta 3)
                   </h3>
-                  {tripPlan.transfer && (
-                    <p className="mb-2 text-[11px] text-violet-900">
-                      Cambiá en <strong>{tripPlan.transfer.name}</strong>
-                      {tripPlan.transfer.total_m != null && (
-                        <>
-                          {" "}
-                          · A→C{" "}
-                          {Math.round(tripPlan.transfer.dist_a_c_m || 0)} m + C→B{" "}
-                          {Math.round(tripPlan.transfer.dist_c_b_m || 0)} m ={" "}
-                          <strong>{Math.round(tripPlan.transfer.total_m)} m</strong>
-                        </>
-                      )}
-                    </p>
-                  )}
-                  <ol className="flex flex-col gap-2 text-[11px] text-violet-950">
-                    {tripPlan.legs.map((leg) => (
-                      <li
-                        key={`leg-${leg.leg}-${leg.id_itinerario}`}
-                        className="rounded-lg border border-violet-500/30 bg-background/70 px-2.5 py-2"
-                      >
-                        <p className="font-bold">
-                          Tramo {leg.leg} ·{" "}
-                          {leg.linea ? `Línea ${leg.linea}` : leg.eot_nombre}
-                          {leg.ramal ? ` (${leg.ramal})` : ""}
-                        </p>
-                        <p className="mt-0.5 text-muted-foreground">
-                          Subí: {leg.boarding.name} → Bajá: {leg.alighting.name}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {leg.eot_nombre}
-                        </p>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-
-              {tripPlan && tripPlan.type === "direct" && tripPlan.legs[0] && (
-                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 shadow-sm">
-                  <h3 className="mb-1 text-sm font-semibold text-emerald-950">
-                    Viaje directo · 1 itinerario
-                  </h3>
-                  <p className="text-[11px] text-emerald-950">
-                    <strong>
-                      {tripPlan.legs[0].linea
-                        ? `Línea ${tripPlan.legs[0].linea}`
-                        : tripPlan.legs[0].eot_nombre}
-                    </strong>
-                    {" · "}
-                    Subí: {tripPlan.legs[0].boarding.name} → Bajá:{" "}
-                    {tripPlan.legs[0].alighting.name}
+                  <p className="mb-2 text-[10px] text-muted-foreground">
+                    Primero directos (1 itinerario A→B). Luego transbordos más cortos.
                   </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {tripOptions.map((opt) => {
+                      const selected =
+                        tripPlan?.rank === opt.rank &&
+                        tripPlan?.type === opt.type &&
+                        tripPlan?.legs[0]?.id_itinerario ===
+                          opt.legs[0]?.id_itinerario
+                      const title =
+                        opt.type === "direct"
+                          ? `Directo · ${
+                              opt.legs[0]?.linea
+                                ? `L${opt.legs[0].linea}`
+                                : opt.legs[0]?.eot_nombre || "Itinerario"
+                            }`
+                          : `Transbordo · ${
+                              opt.legs[0]?.linea
+                                ? `L${opt.legs[0].linea}`
+                                : opt.legs[0]?.eot_nombre || "?"
+                            } → ${
+                              opt.legs[1]?.linea
+                                ? `L${opt.legs[1].linea}`
+                                : opt.legs[1]?.eot_nombre || "?"
+                            }`
+                      const detail =
+                        opt.type === "direct"
+                          ? `${opt.legs[0]?.boarding.name} → ${opt.legs[0]?.alighting.name}`
+                          : `Cambio en ${opt.transfer?.name || "punto C"}` +
+                            (opt.transfer?.total_m != null
+                              ? ` · ${Math.round(opt.transfer.total_m)} m (A→C→B)`
+                              : "")
+                      return (
+                        <li key={`opt-${opt.rank}-${opt.type}-${opt.legs[0]?.id_itinerario}`}>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setTripPlan(opt)
+                              setTripSummary(formatTripPlanSummary(opt))
+                              speak(formatTripPlanSummary(opt), { force: true })
+                              const ids = [
+                                ...new Set(
+                                  opt.legs
+                                    .map((l) => Number(l.id_itinerario))
+                                    .filter((n) => Number.isFinite(n) && n > 0)
+                                ),
+                              ]
+                              if (ids.length) {
+                                try {
+                                  const res = await fetch(
+                                    apiUrl(`/api/itinerarios?ids=${ids.join(",")}`),
+                                    { cache: "no-store" }
+                                  )
+                                  const data = await res.json()
+                                  if (data?.success && Array.isArray(data.data)) {
+                                    setRealItineraries(data.data)
+                                    allItinerariesRef.current = data.data
+                                  }
+                                } catch {
+                                  /* ignore */
+                                }
+                              }
+                              const cats = [
+                                ...new Set(
+                                  opt.legs
+                                    .map((l) => l.cod_catalogo)
+                                    .filter((n) => Number.isFinite(n))
+                                ),
+                              ] as number[]
+                              const lineas = [
+                                ...new Set(
+                                  opt.legs
+                                    .map((l) => String(l.linea || "").trim())
+                                    .filter(Boolean)
+                                ),
+                              ] as string[]
+                              if (cats.length || lineas.length) {
+                                setTripBusFilter({ catalogos: cats, lineas })
+                              }
+                            }}
+                            className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ${
+                              selected
+                                ? opt.type === "direct"
+                                  ? "border-emerald-500/60 bg-emerald-500/15"
+                                  : "border-violet-500/60 bg-violet-500/15"
+                                : "border-border/70 bg-muted/40 hover:bg-muted"
+                            }`}
+                          >
+                            <span
+                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                                opt.type === "direct"
+                                  ? "bg-emerald-600"
+                                  : "bg-violet-600"
+                              }`}
+                            >
+                              {opt.rank || "?"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="font-semibold text-foreground">
+                                {title}
+                              </span>
+                              <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                {detail}
+                              </span>
+                              <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">
+                                {opt.type === "direct"
+                                  ? "1 itinerario · sentido A→B"
+                                  : "2 itinerarios · sentido A→C→B"}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 </div>
               )}
 
