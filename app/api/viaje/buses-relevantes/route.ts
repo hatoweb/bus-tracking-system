@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID, poolGPS } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
-import {
-  enrichBusesWithAccesibilidad,
-  estimateEtaMinutes,
-} from '@/lib/bus-accesibilidad'
+import { estimateEtaMinutes } from '@/lib/bus-accesibilidad'
+import { enrichBusesWithAccesibilidad } from '@/lib/bus-accesibilidad-server'
 
 function calculateDistanceMeters(
   lat1: number,

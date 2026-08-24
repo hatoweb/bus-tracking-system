@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolGPS, poolCID } from '@/lib/db'
-import {
-  enrichBusesWithAccesibilidad,
-  estimateEtaMinutes,
-} from '@/lib/bus-accesibilidad'
+import { estimateEtaMinutes } from '@/lib/bus-accesibilidad'
+import { enrichBusesWithAccesibilidad } from '@/lib/bus-accesibilidad-server'
 
 // Helper para distancia Haversine (en metros)
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
