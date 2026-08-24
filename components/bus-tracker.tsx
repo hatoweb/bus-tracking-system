@@ -16,6 +16,7 @@ import {
   User as UserIcon,
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
 } from "lucide-react"
 import {
   type Bus,
@@ -211,6 +212,8 @@ export function BusTracker() {
   const [tripSummary, setTripSummary] = useState<string | null>(null)
   const [tripPlan, setTripPlan] = useState<TripPlanResult | null>(null)
   const [tripOptions, setTripOptions] = useState<TripPlanResult[]>([])
+  const [tripOptionsOpen, setTripOptionsOpen] = useState(true)
+  const [busesSectionOpen, setBusesSectionOpen] = useState(true)
   const [destNearbyStops, setDestNearbyStops] = useState<NearbyStop[]>([])
   const [tripGuidance, setTripGuidance] = useState<{
     mode: "walk_to_stop" | "to_destination"
@@ -735,6 +738,9 @@ export function BusTracker() {
                 ? [planData.best]
                 : []
             setTripOptions(opts)
+            if (opts.length > 0) {
+              setTripOptionsOpen(true)
+            }
             if (planData?.success && opts.length > 0) {
               computedPlan = opts[0]
               setTripPlan(computedPlan)
@@ -2239,71 +2245,7 @@ export function BusTracker() {
                 </div>
               </div>
 
-              {/* Buses en movimiento — justo debajo del mapa */}
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold text-foreground">
-                    {tripBusFilter
-                      ? `Buses de tu línea (${closestBuses.length || realBuses.length})`
-                      : useRealData
-                        ? `Líneas más cercanas (${closestBuses.length || 0})`
-                        : "Buses en tiempo real"}
-                  </h2>
-                  {tripBusFilter && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTripBusFilter(null)
-                        speak("Filtro de viaje desactivado", { force: true })
-                      }}
-                      className="text-[10px] font-semibold text-primary hover:underline"
-                    >
-                      Ver todos
-                    </button>
-                  )}
-                </div>
-                {tripBusFilter && (
-                  <p className="mb-2 text-[11px] text-muted-foreground">
-                    Solo la empresa/línea elegida, en movimiento o cerca de la parada recomendada
-                    {tripBusFilter.lineas.length > 0 && (
-                      <>
-                        :{" "}
-                        <span className="font-medium text-foreground">
-                          L
-                          {tripBusFilter.lineas
-                            .filter((l) => /^[\d\-]+$/i.test(l) || /^[A-Z]?\d/i.test(l))
-                            .slice(0, 6)
-                            .join(", L") || tripBusFilter.lineas.slice(0, 4).join(", ")}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                )}
-                {useRealData ? (
-                  <RealBusList
-                    buses={
-                      closestBuses.length > 0
-                        ? closestBuses
-                        : realBuses.map((b) => ({ ...b }))
-                    }
-                    selectedBusId={selectedBusId}
-                    onSelectBus={handleSelectBus}
-                    onlyClosestLines={!tripBusFilter}
-                    maxLines={tripBusFilter ? 8 : 3}
-                    avgSpeedKmh={avgBusSpeedKmh}
-                    userHasLocation={Boolean(user?.locationShared && user.lat && user.lng)}
-                    preferAccessible={needsAccessibility}
-                  />
-                ) : (
-                  <BusList buses={buses} selectedBusId={selectedBusId} onSelectBus={handleSelectBus} />
-                )}
-              </div>
-
-              {/* Espacio publicitario */}
-              <div className="flex h-20 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 text-muted-foreground">
-                <span className="text-sm font-medium">Espacio publicitario</span>
-              </div>
-
+              {/* Trip Guidance (alerta / parada recomendada) */}
               {tripGuidance && (
                 <div
                   className={`rounded-xl border px-3 py-2.5 text-xs shadow-sm ${
@@ -2312,7 +2254,7 @@ export function BusTracker() {
                       : "border-emerald-500/50 bg-emerald-500/10 text-emerald-950"
                   }`}
                 >
-                        {tripGuidance.mode === "walk_to_stop" ? (
+                  {tripGuidance.mode === "walk_to_stop" ? (
                     <>
                       <p className="font-bold">
                         {selectedBoardingStopId
@@ -2347,185 +2289,231 @@ export function BusTracker() {
                 </div>
               )}
 
+              {/* Opciones de viaje — colapsable (debajo del mapa) */}
               {tripOptions.length > 0 && (
-                <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-                  <h3 className="mb-1 text-sm font-semibold text-foreground">
-                    Opciones de viaje (hasta 3)
-                  </h3>
-                  <p className="mb-2 text-[10px] text-muted-foreground">
-                    Primero directos (1 itinerario A→B). Luego transbordos más cortos.
-                  </p>
-                  <ul className="flex flex-col gap-1.5">
-                    {tripOptions.map((opt) => {
-                      const selected =
-                        tripPlan?.rank === opt.rank &&
-                        tripPlan?.type === opt.type &&
-                        tripPlan?.legs[0]?.id_itinerario ===
-                          opt.legs[0]?.id_itinerario
-                      const leg0 = opt.legs[0]
-                      const leg1 = opt.legs[1]
-                      const isWalk =
-                        opt.transfer?.type === "walk" ||
-                        (opt.transfer?.walk_distance_m != null &&
-                          opt.transfer.walk_distance_m > 20)
-                      return (
-                        <li key={`opt-${opt.rank}-${opt.type}-${leg0?.id_itinerario}`}>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              setTripPlan(opt)
-                              setTripSummary(formatTripPlanSummary(opt))
-                              speak(formatTripPlanSummary(opt), { force: true })
-                              const ids = [
-                                ...new Set(
-                                  opt.legs
-                                    .map((l) => Number(l.id_itinerario))
-                                    .filter((n) => Number.isFinite(n) && n > 0)
-                                ),
-                              ]
-                              if (ids.length) {
-                                try {
-                                  const res = await fetch(
-                                    apiUrl(`/api/itinerarios?ids=${ids.join(",")}`),
-                                    { cache: "no-store" }
-                                  )
-                                  const data = await res.json()
-                                  if (data?.success && Array.isArray(data.data)) {
-                                    setRealItineraries(data.data)
-                                    allItinerariesRef.current = data.data
-                                  }
-                                } catch {
-                                  /* ignore */
-                                }
-                              }
-                              const cats = [
-                                ...new Set(
-                                  opt.legs
-                                    .map((l) => l.cod_catalogo)
-                                    .filter((n) => Number.isFinite(n))
-                                ),
-                              ] as number[]
-                              const lineas = [
-                                ...new Set(
-                                  opt.legs
-                                    .map((l) => String(l.linea || "").trim())
-                                    .filter(Boolean)
-                                ),
-                              ] as string[]
-                              if (cats.length || lineas.length) {
-                                setTripBusFilter({ catalogos: cats, lineas })
-                              }
-                            }}
-                            className={`flex w-full items-start gap-2.5 rounded-xl border p-3 text-left text-xs transition-colors ${
-                              selected
-                                ? opt.type === "direct"
-                                  ? "border-emerald-500/80 bg-emerald-500/15 shadow-sm"
-                                  : "border-violet-500/80 bg-violet-500/15 shadow-sm"
-                                : "border-border/70 bg-muted/40 hover:bg-muted/70"
+                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setTripOptionsOpen((v) => !v)}
+                    aria-expanded={tripOptionsOpen}
+                    className="flex w-full items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Route className="h-4 w-4 shrink-0 text-primary" />
+                        <h3 className="text-sm font-semibold text-foreground">
+                          Opciones de viaje ({tripOptions.length})
+                        </h3>
+                        {tripPlan && !tripOptionsOpen && (
+                          <span
+                            className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                              tripPlan.type === "direct"
+                                ? "bg-emerald-600"
+                                : "bg-violet-600"
                             }`}
                           >
-                            <span
-                              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black text-white ${
-                                opt.type === "direct"
-                                  ? "bg-emerald-600"
-                                  : "bg-violet-600"
-                              }`}
-                            >
-                              {opt.rank || "?"}
-                            </span>
-                            <div className="min-w-0 flex-1 flex flex-col gap-1">
-                              {/* Encabezado: Tipo de viaje y tiempo */}
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-bold text-foreground text-[13px]">
-                                  {opt.type === "direct" ? "Opción Directa" : "Con Transbordo"}
-                                </span>
-                                {opt.total_duration_min != null && (
-                                  <span className="shrink-0 font-bold text-primary text-[11px]">
-                                    ~{Math.round(opt.total_duration_min)} min total
-                                  </span>
-                                )}
-                              </div>
+                            #{tripPlan.rank} {tripPlan.type === "direct" ? "Directa" : "Transbordo"}
+                          </span>
+                        )}
+                      </div>
+                      {!tripOptionsOpen ? (
+                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                          Tocá para ver o cambiar opciones de viaje
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Primero directos (1 itinerario A→B). Luego transbordos más cortos.
+                        </p>
+                      )}
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                        tripOptionsOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
 
-                              {/* Empresa(s) a tomar claramente destacadas */}
-                              {opt.type === "direct" && leg0 ? (
-                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
-                                    🏢 Empresa: {leg0.eot_nombre}
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                      tripOptionsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="border-t border-border/70 p-3 pt-2">
+                        <ul className="flex flex-col gap-1.5">
+                          {tripOptions.map((opt) => {
+                            const selected =
+                              tripPlan?.rank === opt.rank &&
+                              tripPlan?.type === opt.type &&
+                              tripPlan?.legs[0]?.id_itinerario ===
+                                opt.legs[0]?.id_itinerario
+                            const leg0 = opt.legs[0]
+                            const leg1 = opt.legs[1]
+                            const isWalk =
+                              opt.transfer?.type === "walk" ||
+                              (opt.transfer?.walk_distance_m != null &&
+                                opt.transfer.walk_distance_m > 20)
+                            return (
+                              <li key={`opt-${opt.rank}-${opt.type}-${leg0?.id_itinerario}`}>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    setTripPlan(opt)
+                                    setTripSummary(formatTripPlanSummary(opt))
+                                    speak(formatTripPlanSummary(opt), { force: true })
+                                    const ids = [
+                                      ...new Set(
+                                        opt.legs
+                                          .map((l) => Number(l.id_itinerario))
+                                          .filter((n) => Number.isFinite(n) && n > 0)
+                                      ),
+                                    ]
+                                    if (ids.length) {
+                                      try {
+                                        const res = await fetch(
+                                          apiUrl(`/api/itinerarios?ids=${ids.join(",")}`),
+                                          { cache: "no-store" }
+                                        )
+                                        const data = await res.json()
+                                        if (data?.success && Array.isArray(data.data)) {
+                                          setRealItineraries(data.data)
+                                          allItinerariesRef.current = data.data
+                                        }
+                                      } catch {
+                                        /* ignore */
+                                      }
+                                    }
+                                    const cats = [
+                                      ...new Set(
+                                        opt.legs
+                                          .map((l) => l.cod_catalogo)
+                                          .filter((n) => Number.isFinite(n))
+                                      ),
+                                    ] as number[]
+                                    const lineas = [
+                                      ...new Set(
+                                        opt.legs
+                                          .map((l) => String(l.linea || "").trim())
+                                          .filter(Boolean)
+                                      ),
+                                    ] as string[]
+                                    if (cats.length || lineas.length) {
+                                      setTripBusFilter({ catalogos: cats, lineas })
+                                    }
+                                  }}
+                                  className={`flex w-full items-start gap-2.5 rounded-xl border p-3 text-left text-xs transition-colors ${
+                                    selected
+                                      ? opt.type === "direct"
+                                        ? "border-emerald-500/80 bg-emerald-500/15 shadow-sm"
+                                        : "border-violet-500/80 bg-violet-500/15 shadow-sm"
+                                      : "border-border/70 bg-muted/40 hover:bg-muted/70"
+                                  }`}
+                                >
+                                  <span
+                                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black text-white ${
+                                      opt.type === "direct"
+                                        ? "bg-emerald-600"
+                                        : "bg-violet-600"
+                                    }`}
+                                  >
+                                    {opt.rank || "?"}
                                   </span>
-                                  {leg0.linea && (
-                                    <span className="inline-flex items-center rounded-md bg-emerald-700/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                                      Línea {leg0.linea}
-                                    </span>
-                                  )}
-                                  {leg0.ramal && (
-                                    <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
-                                      ({leg0.ramal})
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="flex flex-col gap-1 mt-0.5">
-                                  <div className="flex flex-wrap items-center gap-1">
-                                    <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                                      1) {leg0?.eot_nombre} {leg0?.linea ? `(L${leg0.linea})` : ""}
-                                    </span>
-                                    <span className="text-muted-foreground text-[10px]">➔</span>
-                                    <span className="inline-flex items-center gap-1 rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                                      2) {leg1?.eot_nombre} {leg1?.linea ? `(L${leg1.linea})` : ""}
-                                    </span>
+                                  <div className="min-w-0 flex-1 flex flex-col gap-1">
+                                    {/* Encabezado: Tipo de viaje y tiempo */}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-bold text-foreground text-[13px]">
+                                        {opt.type === "direct" ? "Opción Directa" : "Con Transbordo"}
+                                      </span>
+                                      {opt.total_duration_min != null && (
+                                        <span className="shrink-0 font-bold text-primary text-[11px]">
+                                          ~{Math.round(opt.total_duration_min)} min total
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Empresa(s) a tomar claramente destacadas */}
+                                    {opt.type === "direct" && leg0 ? (
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
+                                          🏢 Empresa: {leg0.eot_nombre}
+                                        </span>
+                                        {leg0.linea && (
+                                          <span className="inline-flex items-center rounded-md bg-emerald-700/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                                            Línea {leg0.linea}
+                                          </span>
+                                        )}
+                                        {leg0.ramal && (
+                                          <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+                                            ({leg0.ramal})
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col gap-1 mt-0.5">
+                                        <div className="flex flex-wrap items-center gap-1">
+                                          <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                            1) {leg0?.eot_nombre} {leg0?.linea ? `(L${leg0.linea})` : ""}
+                                          </span>
+                                          <span className="text-muted-foreground text-[10px]">➔</span>
+                                          <span className="inline-flex items-center gap-1 rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                            2) {leg1?.eot_nombre} {leg1?.linea ? `(L${leg1.linea})` : ""}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Instrucciones de subida / bajada / transbordo */}
+                                    <div className="text-[11px] text-muted-foreground mt-1 flex flex-col gap-0.5">
+                                      {opt.type === "direct" && leg0 ? (
+                                        <>
+                                          <p className="leading-tight">
+                                            <span className="font-semibold text-emerald-700">Subí en:</span> {leg0.boarding.name}
+                                          </p>
+                                          <p className="leading-tight">
+                                            <span className="font-semibold text-rose-700">Bajá en:</span> {leg0.alighting.name}
+                                          </p>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <p className="leading-tight">
+                                            <span className="font-semibold text-violet-700">1) Tomá {leg0?.eot_nombre}:</span> en {leg0?.boarding.name} hasta {leg0?.alighting.name}
+                                          </p>
+                                          <p className="leading-tight text-amber-800">
+                                            <span className="font-semibold">2) Transbordo:</span>{" "}
+                                            {isWalk
+                                              ? `Caminá ${Math.round(opt.transfer?.walk_distance_m || 0)} m a ${opt.transfer?.to_stop_name || leg1?.boarding.name}`
+                                              : `En la misma parada (${opt.transfer?.name || leg0?.alighting.name})`}
+                                          </p>
+                                          <p className="leading-tight">
+                                            <span className="font-semibold text-violet-700">3) Tomá {leg1?.eot_nombre}:</span> hasta {leg1?.alighting.name}
+                                          </p>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {/* Metadatos adicionales */}
+                                    <div className="mt-1 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                                      {opt.type === "direct" ? (
+                                        <span>
+                                          {leg0?.num_stops != null ? `${leg0.num_stops} paradas a bordo` : "1 itinerario"}
+                                          {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie` : ""}
+                                        </span>
+                                      ) : (
+                                        <span>
+                                          2 colectivos
+                                          {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie total` : ""}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-
-                              {/* Instrucciones de subida / bajada / transbordo */}
-                              <div className="text-[11px] text-muted-foreground mt-1 flex flex-col gap-0.5">
-                                {opt.type === "direct" && leg0 ? (
-                                  <>
-                                    <p className="leading-tight">
-                                      <span className="font-semibold text-emerald-700">Subí en:</span> {leg0.boarding.name}
-                                    </p>
-                                    <p className="leading-tight">
-                                      <span className="font-semibold text-rose-700">Bajá en:</span> {leg0.alighting.name}
-                                    </p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <p className="leading-tight">
-                                      <span className="font-semibold text-violet-700">1) Tomá {leg0?.eot_nombre}:</span> en {leg0?.boarding.name} hasta {leg0?.alighting.name}
-                                    </p>
-                                    <p className="leading-tight text-amber-800">
-                                      <span className="font-semibold">2) Transbordo:</span>{" "}
-                                      {isWalk
-                                        ? `Caminá ${Math.round(opt.transfer?.walk_distance_m || 0)} m a ${opt.transfer?.to_stop_name || leg1?.boarding.name}`
-                                        : `En la misma parada (${opt.transfer?.name || leg0?.alighting.name})`}
-                                    </p>
-                                    <p className="leading-tight">
-                                      <span className="font-semibold text-violet-700">3) Tomá {leg1?.eot_nombre}:</span> hasta {leg1?.alighting.name}
-                                    </p>
-                                  </>
-                                )}
-                              </div>
-
-                              {/* Metadatos adicionales */}
-                              <div className="mt-1 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
-                                {opt.type === "direct" ? (
-                                  <span>
-                                    {leg0?.num_stops != null ? `${leg0.num_stops} paradas a bordo` : "1 itinerario"}
-                                    {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie` : ""}
-                                  </span>
-                                ) : (
-                                  <span>
-                                    2 colectivos
-                                    {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie total` : ""}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2621,6 +2609,109 @@ export function BusTracker() {
                   </ul>
                 </div>
               )}
+
+              {/* Buses en movimiento — colapsable (debajo de opciones de viaje) */}
+              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setBusesSectionOpen((v) => !v)}
+                  aria-expanded={busesSectionOpen}
+                  className="flex w-full items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-muted/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <BusIcon className="h-4 w-4 shrink-0 text-primary" />
+                      <h2 className="text-sm font-semibold text-foreground">
+                        {tripBusFilter
+                          ? `Buses de tu línea (${closestBuses.length || realBuses.length})`
+                          : useRealData
+                            ? `Líneas más cercanas (${closestBuses.length || 0})`
+                            : "Buses en tiempo real"}
+                      </h2>
+                    </div>
+                    {!busesSectionOpen && (
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        {tripBusFilter
+                          ? `Filtrado por línea L${tripBusFilter.lineas.join(", L")}`
+                          : useRealData
+                            ? `${closestBuses.length || realBuses.length} buses en seguimiento`
+                            : `${buses.length} buses simulados`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {tripBusFilter && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setTripBusFilter(null)
+                          speak("Filtro de viaje desactivado", { force: true })
+                        }}
+                        className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20 hover:underline"
+                      >
+                        Ver todos
+                      </button>
+                    )}
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                        busesSectionOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                    busesSectionOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="border-t border-border/70 p-3 pt-2">
+                      {tripBusFilter && (
+                        <p className="mb-2 text-[11px] text-muted-foreground">
+                          Solo la empresa/línea elegida, en movimiento o cerca de la parada recomendada
+                          {tripBusFilter.lineas.length > 0 && (
+                            <>
+                              :{" "}
+                              <span className="font-medium text-foreground">
+                                L
+                                {tripBusFilter.lineas
+                                  .filter((l) => /^[\d\-]+$/i.test(l) || /^[A-Z]?\d/i.test(l))
+                                  .slice(0, 6)
+                                  .join(", L") || tripBusFilter.lineas.slice(0, 4).join(", ")}
+                              </span>
+                            </>
+                          )}
+                        </p>
+                      )}
+                      {useRealData ? (
+                        <RealBusList
+                          buses={
+                            closestBuses.length > 0
+                              ? closestBuses
+                              : realBuses.map((b) => ({ ...b }))
+                          }
+                          selectedBusId={selectedBusId}
+                          onSelectBus={handleSelectBus}
+                          onlyClosestLines={!tripBusFilter}
+                          maxLines={tripBusFilter ? 8 : 3}
+                          avgSpeedKmh={avgBusSpeedKmh}
+                          userHasLocation={Boolean(user?.locationShared && user.lat && user.lng)}
+                          preferAccessible={needsAccessibility}
+                        />
+                      ) : (
+                        <BusList buses={buses} selectedBusId={selectedBusId} onSelectBus={handleSelectBus} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Espacio publicitario */}
+              <div className="flex h-20 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 text-muted-foreground">
+                <span className="text-sm font-medium">Espacio publicitario</span>
+              </div>
 
               {/* Selector de modo / empresa */}
               <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-2.5 text-xs">
