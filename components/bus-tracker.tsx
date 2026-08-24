@@ -2362,39 +2362,14 @@ export function BusTracker() {
                         tripPlan?.type === opt.type &&
                         tripPlan?.legs[0]?.id_itinerario ===
                           opt.legs[0]?.id_itinerario
-                      const title =
-                        opt.type === "direct"
-                          ? `Directo · ${
-                              opt.legs[0]?.linea
-                                ? `L${opt.legs[0].linea}`
-                                : opt.legs[0]?.eot_nombre || "Itinerario"
-                            }`
-                          : `Transbordo · ${
-                              opt.legs[0]?.linea
-                                ? `L${opt.legs[0].linea}`
-                                : opt.legs[0]?.eot_nombre || "?"
-                            } → ${
-                              opt.legs[1]?.linea
-                                ? `L${opt.legs[1].linea}`
-                                : opt.legs[1]?.eot_nombre || "?"
-                            }`
-                      const detail =
-                        opt.type === "direct"
-                          ? `${opt.legs[0]?.boarding.name} → ${opt.legs[0]?.alighting.name}` +
-                            (opt.total_duration_min != null
-                              ? ` · ~${Math.round(opt.total_duration_min)} min`
-                              : "")
-                          : (opt.transfer?.type === "walk" || (opt.transfer?.walk_distance_m != null && opt.transfer.walk_distance_m > 20))
-                            ? `Caminá ${Math.round(opt.transfer?.walk_distance_m || 0)} m: ${opt.transfer?.from_stop_name || "Bajada"} → ${opt.transfer?.to_stop_name || "Subida"}` +
-                              (opt.total_duration_min != null
-                                ? ` · ~${Math.round(opt.total_duration_min)} min total`
-                                : "")
-                            : `Cambio en ${opt.transfer?.name || "punto C"}` +
-                              (opt.total_duration_min != null
-                                ? ` · ~${Math.round(opt.total_duration_min)} min total`
-                                : "")
+                      const leg0 = opt.legs[0]
+                      const leg1 = opt.legs[1]
+                      const isWalk =
+                        opt.transfer?.type === "walk" ||
+                        (opt.transfer?.walk_distance_m != null &&
+                          opt.transfer.walk_distance_m > 20)
                       return (
-                        <li key={`opt-${opt.rank}-${opt.type}-${opt.legs[0]?.id_itinerario}`}>
+                        <li key={`opt-${opt.rank}-${opt.type}-${leg0?.id_itinerario}`}>
                           <button
                             type="button"
                             onClick={async () => {
@@ -2441,16 +2416,16 @@ export function BusTracker() {
                                 setTripBusFilter({ catalogos: cats, lineas })
                               }
                             }}
-                            className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ${
+                            className={`flex w-full items-start gap-2.5 rounded-xl border p-3 text-left text-xs transition-colors ${
                               selected
                                 ? opt.type === "direct"
-                                  ? "border-emerald-500/60 bg-emerald-500/15"
-                                  : "border-violet-500/60 bg-violet-500/15"
-                                : "border-border/70 bg-muted/40 hover:bg-muted"
+                                  ? "border-emerald-500/80 bg-emerald-500/15 shadow-sm"
+                                  : "border-violet-500/80 bg-violet-500/15 shadow-sm"
+                                : "border-border/70 bg-muted/40 hover:bg-muted/70"
                             }`}
                           >
                             <span
-                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black text-white ${
                                 opt.type === "direct"
                                   ? "bg-emerald-600"
                                   : "bg-violet-600"
@@ -2458,19 +2433,94 @@ export function BusTracker() {
                             >
                               {opt.rank || "?"}
                             </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="font-semibold text-foreground">
-                                {title}
-                              </span>
-                              <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                                {detail}
-                              </span>
-                              <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">
-                                {opt.type === "direct"
-                                  ? `1 itinerario · ${opt.legs[0]?.num_stops != null ? `${opt.legs[0].num_stops} paradas` : "sentido A→B"}${opt.total_walk_m != null ? ` · ${Math.round(opt.total_walk_m)} m a pie` : ""}`
-                                  : `2 itinerarios · ${opt.transfer?.type === "walk" ? `transbordo a pie (${Math.round(opt.transfer.walk_distance_m || 0)} m)` : "mismo punto"}${opt.total_walk_m != null ? ` · ${Math.round(opt.total_walk_m)} m a pie total` : ""}`}
-                              </span>
-                            </span>
+                            <div className="min-w-0 flex-1 flex flex-col gap-1">
+                              {/* Encabezado: Tipo de viaje y tiempo */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-foreground text-[13px]">
+                                  {opt.type === "direct" ? "Opción Directa" : "Con Transbordo"}
+                                </span>
+                                {opt.total_duration_min != null && (
+                                  <span className="shrink-0 font-bold text-primary text-[11px]">
+                                    ~{Math.round(opt.total_duration_min)} min total
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Empresa(s) a tomar claramente destacadas */}
+                              {opt.type === "direct" && leg0 ? (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
+                                    🏢 Empresa: {leg0.eot_nombre}
+                                  </span>
+                                  {leg0.linea && (
+                                    <span className="inline-flex items-center rounded-md bg-emerald-700/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                                      Línea {leg0.linea}
+                                    </span>
+                                  )}
+                                  {leg0.ramal && (
+                                    <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+                                      ({leg0.ramal})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1 mt-0.5">
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                      1) {leg0?.eot_nombre} {leg0?.linea ? `(L${leg0.linea})` : ""}
+                                    </span>
+                                    <span className="text-muted-foreground text-[10px]">➔</span>
+                                    <span className="inline-flex items-center gap-1 rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                      2) {leg1?.eot_nombre} {leg1?.linea ? `(L${leg1.linea})` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Instrucciones de subida / bajada / transbordo */}
+                              <div className="text-[11px] text-muted-foreground mt-1 flex flex-col gap-0.5">
+                                {opt.type === "direct" && leg0 ? (
+                                  <>
+                                    <p className="leading-tight">
+                                      <span className="font-semibold text-emerald-700">Subí en:</span> {leg0.boarding.name}
+                                    </p>
+                                    <p className="leading-tight">
+                                      <span className="font-semibold text-rose-700">Bajá en:</span> {leg0.alighting.name}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="leading-tight">
+                                      <span className="font-semibold text-violet-700">1) Tomá {leg0?.eot_nombre}:</span> en {leg0?.boarding.name} hasta {leg0?.alighting.name}
+                                    </p>
+                                    <p className="leading-tight text-amber-800">
+                                      <span className="font-semibold">2) Transbordo:</span>{" "}
+                                      {isWalk
+                                        ? `Caminá ${Math.round(opt.transfer?.walk_distance_m || 0)} m a ${opt.transfer?.to_stop_name || leg1?.boarding.name}`
+                                        : `En la misma parada (${opt.transfer?.name || leg0?.alighting.name})`}
+                                    </p>
+                                    <p className="leading-tight">
+                                      <span className="font-semibold text-violet-700">3) Tomá {leg1?.eot_nombre}:</span> hasta {leg1?.alighting.name}
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Metadatos adicionales */}
+                              <div className="mt-1 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                                {opt.type === "direct" ? (
+                                  <span>
+                                    {leg0?.num_stops != null ? `${leg0.num_stops} paradas a bordo` : "1 itinerario"}
+                                    {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie` : ""}
+                                  </span>
+                                ) : (
+                                  <span>
+                                    2 colectivos
+                                    {opt.total_walk_m != null && opt.total_walk_m > 30 ? ` · ${Math.round(opt.total_walk_m)} m a pie total` : ""}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </button>
                         </li>
                       )

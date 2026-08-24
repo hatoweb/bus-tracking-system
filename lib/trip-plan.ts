@@ -62,27 +62,28 @@ export type TripPlanResult = {
 export function formatTripPlanSummary(plan: TripPlanResult): string {
   if (plan.type === 'direct' && plan.legs[0]) {
     const l = plan.legs[0]
-    const lineLabel = l.linea ? `L${l.linea}` : l.eot_nombre
+    const lineLabel = l.linea ? `L${l.linea}` : 'Colectivo'
+    const empLabel = l.eot_nombre ? ` · ${l.eot_nombre}` : ''
     const walkOri =
       plan.walk_origin_m && plan.walk_origin_m > 30
         ? `Caminá ${Math.round(plan.walk_origin_m)} m a ${l.boarding.name}. `
         : `Subí en ${l.boarding.name}. `
     const rideInfo =
       l.num_stops != null && l.estimated_ride_min != null
-        ? `Viajá ${l.num_stops} paradas (~${Math.round(l.estimated_ride_min)} min) en ${lineLabel} (${l.eot_nombre}). `
-        : `Tomá ${lineLabel} (${l.eot_nombre}). `
+        ? `Tomá ${l.eot_nombre}${l.linea ? ` (L${l.linea})` : ''} por ${l.num_stops} paradas (~${Math.round(l.estimated_ride_min)} min). `
+        : `Tomá ${l.eot_nombre}${l.linea ? ` (L${l.linea})` : ''}. `
     const walkDst =
       plan.walk_dest_m && plan.walk_dest_m > 30
         ? `Bajá en ${l.alighting.name} y caminá ${Math.round(plan.walk_dest_m)} m a tu destino.`
         : `Bajá en ${l.alighting.name}.`
 
-    return `Opción directa · ${lineLabel}: ${walkOri}${rideInfo}${walkDst}`
+    return `Opción directa · ${lineLabel}${empLabel}: ${walkOri}${rideInfo}${walkDst}`
   }
 
   if (plan.type === 'transfer' && plan.legs.length >= 2) {
     const [a, b] = plan.legs
-    const lineA = a.linea ? `L${a.linea}` : a.eot_nombre
-    const lineB = b.linea ? `L${b.linea}` : b.eot_nombre
+    const labelA = a.linea ? `L${a.linea} (${a.eot_nombre})` : a.eot_nombre
+    const labelB = b.linea ? `L${b.linea} (${b.eot_nombre})` : b.eot_nombre
 
     const isWalk =
       plan.transfer?.type === 'walk' ||
@@ -95,9 +96,9 @@ export function formatTripPlanSummary(plan: TripPlanResult): string {
 
     return (
       `Opción con transbordo: ` +
-      `1) Tomá ${lineA} en ${a.boarding.name} hasta ${a.alighting.name}.` +
+      `1) Tomá ${labelA} en ${a.boarding.name} hasta ${a.alighting.name}.` +
       walkTransferTxt +
-      ` 3) Tomá ${lineB} hasta ${b.alighting.name}.`
+      ` 3) Tomá ${labelB} hasta ${b.alighting.name}.`
     )
   }
 
