@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Comparativa Modelo Unidades Funcionales</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --primary: #3b82f6;
+            --primary-hover: #60a5fa;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-geo: #10b981;
+            --accent-uf: #f59e0b;
+            --accent-pub: #8b5cf6;
+        }
+
+        body { 
+            font-family: 'Outfit', 'Inter', sans-serif; 
+            background: var(--bg-dark); 
+            color: var(--text-main); 
+            padding: 0; 
+            margin: 0; 
+            line-height: 1.6;
+        }
+
+        .tabs {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            padding: 20px 0;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-tab {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            padding: 12px 28px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.95rem;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-tab:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .nav-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .container { max-width: 1300px; margin: auto; padding: 40px 20px; }
+        
+        .diagram-section, .analysis-section { 
+            background: var(--bg-card); 
+            padding: 35px; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4); 
+            border: 1px solid rgba(255,255,255,0.05);
+            margin-bottom: 40px;
+        }
+
+        h2 { 
+            color: var(--text-main); 
+            font-size: 1.8rem;
+            margin-top: 0; 
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        h2::before {
+            content: '';
+            width: 5px;
+            height: 25px;
+            background: var(--primary);
+            border-radius: 4px;
+        }
+
+        h3 { 
+            color: var(--primary-hover); 
+            margin-top: 35px; 
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .header-main {
+            text-align: center;
+            padding: 80px 20px 40px;
+            background: radial-gradient(circle at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+        }
+
+        .header-main h1 {
+            font-size: 3.2rem;
+            margin-bottom: 15px;
+            letter-spacing: -1px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+        }
+
+        .table-summary { 
+            width: 100%; 
+            border-collapse: separate; 
+            border-spacing: 0;
+            margin-top: 25px; 
+            background: rgba(15, 23, 42, 0.4); 
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .table-summary th, .table-summary td { 
+            padding: 18px; 
+            text-align: left; 
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .table-summary th { 
+            background-color: rgba(59, 130, 246, 0.1); 
+            color: var(--primary-hover); 
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+
+        .table-summary tr:last-child td { border-bottom: none; }
+        .table-summary tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .table-detail-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); 
+            gap: 25px; 
+            margin-top: 40px; 
+        }
+
+        .entity-card { 
+            background: rgba(255, 255, 255, 0.02); 
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+            border-radius: 16px; 
+            padding: 25px; 
+            position: relative;
+            transition: all 0.3s ease; 
+        }
+
+        .entity-card:hover { 
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.04); 
+            border-color: var(--primary); 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .entity-card h4 { 
+            color: var(--primary); 
+            margin: 0 0 15px 0; 
+            font-family: 'JetBrains Mono', monospace; 
+            font-size: 1.15rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .schema-badge {
+            font-size: 0.65rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+        .badge-geo { background: rgba(16, 185, 129, 0.1); color: var(--accent-geo); border: 1px solid rgba(16, 185, 129, 0.2); }
+        .badge-uf { background: rgba(245, 158, 11, 0.1); color: var(--accent-uf); border: 1px solid rgba(245, 158, 11, 0.2); }
+        .badge-pub { background: rgba(139, 92, 246, 0.1); color: var(--accent-pub); border: 1px solid rgba(139, 92, 246, 0.2); }
+
+        .entity-card p { font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 15px; }
+        .entity-card ul { margin: 0; padding-left: 18px; }
+        .entity-card li { font-size: 0.88rem; margin-bottom: 8px; color: #cbd5e1; }
+        .entity-card code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; color: var(--primary-hover); }
+
+        .page { display: none; animation: fadeIn 0.4s ease-out; }
+        .page.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .check-icon { color: var(--accent-geo); margin-right: 8px; }
+        .new-icon { color: var(--primary); font-weight: bold; font-size: 0.75rem; vertical-align: top; }
+
+        .diagram-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+            overflow: auto;
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            justify-content: flex-start;
+        }
+
+        .zoom-controls button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .zoom-controls button:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="header-main">
+        <h1>Centro de Control de Transporte</h1>
+        <p style="color: #94a3b8; font-size: 1.1rem;">Evolución Arquitectónica: Modelo de Unidades Funcionales (Ley 7617)</p>
+    </div>
+
+    <div class="tabs">
+        <a href="#" class="nav-tab active" id="tab-visual" onclick="showPage('visual')">📊 Diagramas Visuales</a>
+        <a href="#" class="nav-tab" id="tab-operativo" onclick="showPage('operativo')">⚙️ Modelo Operativo</a>
+        <a href="#" class="nav-tab" id="tab-analisis" onclick="showPage('analisis')">📜 Justificación Legal</a>
+        <a href="#" class="nav-tab" id="tab-gtfs" onclick="showPage('gtfs')">🌎 Convergencia GTFS</a>
+    </div>
+
+    <div class="container">
+
+        <div id="page-visual" class="page active">
+            <div class="diagram-section">
+                <h2>Modelo Anterior (Estructura Base)</h2>
+                <p>Representa la relación estática original entre empresas y rutas.</p>
+                <div class="diagram-container">
+                    <div id="erd-anterior"></div>
+                </div>
+            </div>
+
+            <div class="diagram-section" style="margin-top: 20px;">
+                <h2>Modelo Modificado (Unidades Funcionales - Ley 7617)</h2>
+                <p>Nueva estructura dinámica que permite consorcios y agrupaciones de rutas temporales.</p>
+                <div class="diagram-container">
+                    <div id="erd-modificado"></div>
+                </div>
+            </div>
+
+            <div class="diagram-section" style="margin-top: 20px;">
+                <h2>Modelo Final Sugerido (Normalización de Líneas)</h2>
+                <p>Separación de la entidad "Línea" para una gestión analítica y comercial superior.</p>
+                <div class="zoom-controls">
+                    <button onclick="zoomDiagram('erd-lineas', 1.15)" title="Aumentar Zoom">➕ Acercar</button>
+                    <button onclick="zoomDiagram('erd-lineas', 0.85)" title="Reducir Zoom">➖ Alejar</button>
+                    <button onclick="zoomDiagram('erd-lineas', 0)" title="Restablecer">🔄 Restablecer</button>
+                </div>
+                <div class="diagram-container">
+                    <div id="erd-lineas"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-operativo" class="page">
+            <div class="analysis-section">
+                <h2>Explicación Detallada: Modelo con Separación de Líneas</h2>
+                <p>Este modelo (Gráfico 3) representa la meta técnica para el Centro de Control. A continuación, se detalla la lógica de cada nivel:</p>
+                
+                <h3>1. El Concepto de "Línea" vs "Ruta"</h3>
+                <p>A diferencia del modelo anterior donde la línea era solo un texto, aquí es una <strong>entidad maestra</strong>. Una Línea (ej. Línea 12) agrupa múltiples rutas operativas.</p>
+                <ul>
+                    <li><strong>Beneficio:</strong> Puedes calcular la rentabilidad y el cumplimiento de una "Línea" completa aunque tenga 20 ramales distintos.</li>
+                    <li><strong>Atributos:</strong> Código comercial, descripción oficial, empresa operadora y color identificativo.</li>
+                </ul>
+
+                <h3>2. Temporalidad y Geometría (Itinerarios)</h3>
+                <p>Una <strong>Ruta</strong> no tiene una geometría fija, sino una relación con <strong>Itinerarios</strong> que tienen fecha de inicio y fin.</p>
+                <ul>
+                    <li><strong>Versiones:</strong> Si una calle cambia de sentido el lunes, el sistema simplemente cierra el itinerario anterior y abre uno nuevo. Los datos históricos de los buses siguen vinculados a la "Ruta" original, pero usando la geometría que era válida en su momento.</li>
+                </ul>
+
+                <h3>3. Paradas y Puntos de Control</h3>
+                <p>Las paradas ya no están vinculadas a un solo itinerario. Se utiliza una <strong>relación muchos-a-muchos</strong> a través de la tabla <code>itinerario_parada</code>.</p>
+                <ul>
+                    <li><strong>Reutilización:</strong> Una misma parada física (ej. Parada 102 en el Centro) puede ser utilizada por 50 líneas diferentes. El sistema permite vincularla a cada itinerario sin duplicar datos.</li>
+                    <li><strong>Orden Operativo:</strong> El número de orden se define en el vínculo, no en la parada. Así, la misma parada puede ser la #5 para la Línea 12 y la #12 para la Línea 23.</li>
+                    <li><strong>Filtrado por Rumbo (Bearing):</strong> <span class="new-icon">[SUPERIOR]</span> Cada parada posee un ángulo de dirección. A diferencia de GTFS estándar, nuestro sistema utiliza este dato para que el monitoreo descarte buses que pasan cerca pero en sentido contrario, garantizando una fiscalización del 100% de precisión.</li>
+                </ul>
+
+                <h3>4. El Nexo con la Unidad Funcional (UF)</h3>
+                <p>La UF es la dueña del servicio. Ella "alquila" o "concesiona" un grupo de <strong>Líneas</strong> (no rutas individuales) a un <strong>Consorcio</strong> o EOT.</p>
+                <ul>
+                    <li><strong>Control de Explotación:</strong> El derecho de explotación se otorga sobre la Línea completa. Esto simplifica la gestión legal y asegura que la UF sea una verdadera red de servicios integrados.</li>
+                    <li><strong>Fiscalización:</strong> La fiscalización se ejecuta a nivel de Línea, monitoreando el cumplimiento de todos sus itinerarios vigentes.</li>
+                </ul>
+
+                <h3>5. La Tabla Malla: Temporalidad Operativa (linea_ruta_catalogo)</h3>
+                <p>Esta tabla es el <strong>diario de vida</strong> de la red. No solo vincula Líneas con Rutas, sino que define <em>cuándo</em> ocurrió esa vinculación.</p>
+                
+                <div style="background: #eef2f7; color: #1e293b; padding: 15px; border-left: 5px solid #3498db; margin: 15px 0;">
+                    <strong>💡 Ejemplo de Superioridad: Trazabilidad Histórica</strong><br>
+                    <p>GTFS es estático; nuestro modelo es <strong>cuatridimensional</strong> (Espacio + Tiempo).</p>
+                    <ul>
+                        <li><strong>Enero a Junio:</strong> La Malla apunta a la Geometría V1.</li>
+                        <li><strong>Julio (Obra Vial):</strong> Se crea la Geometría V2 con desvío.</li>
+                        <li><strong>Resultado:</strong> El sistema mantiene ambas. Si se audita el cumplimiento de Mayo, se usa V1 automáticamente. <strong>La verdad histórica es inalterable.</strong></li>
+                    </ul>
+                </div>
+
+                <h3>6. La Programación Operativa Regular (public.programacion_operativa)</h3>
+                <p>Para hacer disponible al usuario la hora posible de salidas de los buses (viajes planificados) y realizar el control del cumplimiento (planificado vs ejecutado) a las empresas, la <strong>Programación Operativa</strong> se acopla directamente a la Malla de Temporalidad (<code>linea_ruta_catalogo</code>).</p>
+                <ul>
+                    <li><strong>Estructuración por Viaje (Trip-centric):</strong> Cada viaje representa una salida planificada en una hora específica (<code>horario_salida</code>) y calendario base (<code>id_tipo_dia</code>). Al vincularse a <code>linea_ruta_catalogo</code>, el sistema deduce con precisión qué EOT y Unidad Funcional son comercialmente responsables en esa fecha.</li>
+                    <li><strong>Control de Cumplimiento:</strong> Cruza las horas planificadas con las lecturas reales de geocercas registradas por los buses GPS, determinando si el servicio se realizó a tiempo (tolerancias de cumplimiento).</li>
+                </ul>
+
+                <h3>7. Resumen de la Jerarquía Final</h3>
+                <table class="table-summary">
+                    <thead>
+                        <tr>
+                            <th>Nivel</th>
+                            <th>Entidad</th>
+                            <th>Responsabilidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>Nivel 1</strong></td><td>Unidad Funcional</td><td>Gestión Legal y Territorial</td></tr>
+                        <tr><td><strong>Nivel 1.1</strong></td><td>UF Troncales</td><td>Definición de Corredores y Geocercas de Control</td></tr>
+                        <tr><td><strong>Nivel 2</strong></td><td>Línea</td><td>Gestión Comercial y Flota (Explotación)</td></tr>
+                        <tr><td><strong>Nivel 3</strong></td><td>Ruta / Variante</td><td>Programación y Despacho Operativo (Malla de Temporalidad)</td></tr>
+                        <tr><td><strong>Nivel 3.1</strong></td><td>Programación Operativa</td><td>Definición de salidas planificadas (viajes) y calendarios (tipo_dia)</td></tr>
+                        <tr><td><strong>Nivel 4</strong></td><td>Itinerario (Geom)</td><td>Definición Geográfica y Temporal</td></tr>
+                        <tr><td><strong>Nivel 5</strong></td><td>Itinerario_Parada</td><td>Secuenciación (Relación N:M)</td></tr>
+                        <tr><td><strong>Nivel 6</strong></td><td>Paradas Oficiales</td><td>Infraestructura Física y Bearing</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 style="margin-top: 40px;">8. Diccionario Técnico de Entidades</h3>
+                <div class="table-detail-grid">
+                    <div class="entity-card">
+                        <h4>public.lineas <span class="schema-badge badge-pub">Public</span></h4>
+                        <p>La <strong>Entidad Comercial</strong> (Ej: "Línea 12", "Línea 23").</p>
+                        <ul>
+                            <li><code>route_type</code>: Define si es Bus, Tren, etc.</li>
+                            <li><code>id_uf</code>: Enlace opcional a su Unidad Funcional.</li>
+                            <li><code>id_zona</code>: <span class="new-icon">[NUEVO]</span> Zonal al que pertenece.</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="entity-card">
+                        <h4>public.zonas <span class="schema-badge badge-pub">Public</span></h4>
+                        <p>La <strong>Agrupación Zonal</strong>. <span class="new-icon">[NUEVO]</span> Agrupa múltiples líneas en regiones operativas (Ej: Zonal 1, Zonal 2).</p>
+                        <ul>
+                            <li><code>id_zona</code>: Identificador del zonal.</li>
+                            <li><code>nombre</code>: Nombre del zonal.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>public.linea_ruta_catalogo <span class="schema-badge badge-pub">Public</span></h4>
+                        <p>La <strong>Malla de Temporalidad</strong>. Es la tabla más crítica para la trazabilidad histórica.</p>
+                        <ul>
+                            <li><code>id_linea</code>: Quién explota.</li>
+                            <li><code>ruta_hex</code>: Qué ruta técnica usa.</li>
+                            <li><code>fecha_inicio/fin</code>: Período de vigencia.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>public.programacion_operativa <span class="schema-badge badge-pub">Public</span></h4>
+                        <p>La <strong>Programación Regular (Trips)</strong>. Define cuándo y cómo se ejecutan los viajes comerciales de cada línea.</p>
+                        <ul>
+                            <li><code>id_linea_ruta_catalogo</code>: Enlace a la malla activa (determina la línea y la variante física).</li>
+                            <li><code>horario_salida</code>: Hora de salida programada desde la terminal.</li>
+                            <li><code>id_tipo_dia</code>: Calendario base aplicable (Laboral, Sábado, Feriado).</li>
+                            <li><code>fecha_inicio/fin_vigencia</code>: Vigencia temporal de esta programación horaria.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>public.catalogo_rutas <span class="schema-badge badge-pub">Public</span></h4>
+                        <p>El <strong>Inventario Técnico</strong>. Contiene la lista de variantes (Ramal A, Ramal B) y sentidos.</p>
+                        <ul>
+                            <li><code>ruta_hex</code>: El "DNA" de la ruta.</li>
+                            <li><code>sentido</code>: IDA o VUELTA.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>gestion_uf.unidades_funcionales <span class="schema-badge badge-uf">Gestion UF</span></h4>
+                        <p>La <strong>Maestra Legal</strong>. Define el alcance territorial y la agrupación de servicios bajo la Ley 7617.</p>
+                        <ul>
+                            <li><code>nombre_uf</code>: Identificador de la Unidad Funcional.</li>
+                            <li><code>tipo_uf</code>: Categorización (Troncal, Alimentadora).</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>gestion_uf.uf_troncales <span class="schema-badge badge-uf">Gestion UF</span></h4>
+                        <p>Define las <strong>Rutas Troncales</strong> de la UF. Es la base para el cálculo de geocercas de exclusión y fiscalización de corredores.</p>
+                        <ul>
+                            <li><code>id_uf</code>: UF a la que pertenece.</li>
+                            <li><code>geom</code>: La polilínea que define el eje del corredor.</li>
+                            <li><code>es_principal</code>: <span class="new-icon">[NUEVO]</span> Indica si es el corredor principal de la UF.</li>
+                            <li><code>color_hex</code>: Color para visualización en dashboards y mapas.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>geometria.historico_itinerario <span class="schema-badge badge-geo">Geometria</span></h4>
+                        <p>La <strong>Versión Geográfica</strong>. Almacena la línea física (LineString) en un momento dado.</p>
+                        <ul>
+                            <li><code>id_itinerario</code>: Identificador de versión.</li>
+                            <li><code>geom</code>: El trazado real en el mapa.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>geometria.itinerario_parada <span class="schema-badge badge-geo">Geometria</span></h4>
+                        <p>La <strong>Relación N:M</strong>. Define la secuencia de paradas para cada versión de ruta.</p>
+                        <ul>
+                            <li><code>id_itinerario</code>: Enlace al trazado.</li>
+                            <li><code>id_parada</code>: Enlace a la parada física.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>geometria.paradas_oficiales <span class="schema-badge badge-geo">Geometria</span></h4>
+                        <p>Los <strong>Puntos de Servicio</strong>. Infraestructura física compartida por múltiples rutas.</p>
+                        <ul>
+                            <li><code>geom</code>: Ubicación exacta (POINT).</li>
+                            <li><code>bearing</code>: Ángulo de dirección (0-360°).</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>geometria.geocercas <span class="schema-badge badge-geo">Geometria</span></h4>
+                        <p>La <strong>Capa de Validación</strong>. Herramienta invisible de fiscalización automática.</p>
+                        <ul>
+                            <li><code>geom</code>: Polígono que rodea la parada o troncal.</li>
+                            <li><code>id_troncal_uf</code>: Enlace a la ruta troncal.</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>servicios_especiales.servicio_especial</h4>
+                        <p>Define la unidad de negocio operativa (ej. Servicio B1). Es el contenedor principal de la operación.</p>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>servicios_especiales.programacion_operativa</h4>
+                        <p>El <strong>Motor de Viajes (Trips)</strong>. Define cuándo y cómo se ejecutan los itinerarios.</p>
+                        <ul>
+                            <li><code>horario_salida</code>: La hora exacta de inicio.</li>
+                            <li><code>id_tipo_dia</code>: Enlace al calendario (LABORAL, etc).</li>
+                        </ul>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>servicios_especiales.ruta_servicio_especial</h4>
+                        <p>Vincula el Servicio con el Itinerario Geográfico y el sentido (Ida/Vuelta).</p>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>servicios_especiales.parametro_monitoreo</h4>
+                        <p>Configuración técnica de fiscalización: radios de geocerca, tolerancias horarias y umbrales de cumplimiento.</p>
+                    </div>
+
+                    <div class="entity-card">
+                        <h4>control_metricas.*</h4>
+                        <p>El <strong>Motor de Calendarios</strong>. Gestiona la recurrencia y las excepciones operativas.</p>
+                        <ul>
+                            <li><code>tipo_dia</code>: Define los perfiles base (service_id).</li>
+                            <li><code>dias_atipicos</code>: Centraliza las excepciones (feriados, clima).</li>
+                            <li><code>id_tipo_dia_aplicable</code>: <span class="new-icon">[NUEVO]</span> Define qué esquema aplicar en días de excepción.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-analisis" class="page">
+            <div class="analysis-section">
+                <h2>Análisis Detallado del Modelo</h2>
+                
+                <h3>Estructura Estratégica (Ley 7617)</h3>
+                <p>La transición hacia las <strong>Unidades Funcionales (UF)</strong> no es solo un cambio de nombre; es una reestructuración profunda de la operativa del transporte público en Paraguay. Bajo este modelo, el sistema se aleja de la dependencia directa de una única EOT por ruta para permitir:</p>
+                <ul>
+                    <li><strong>Consorciación Dinámica:</strong> Las EOTs pueden agruparse bajo un Consorcio para operar una UF completa, compartiendo recursos y riesgos.</li>
+                    <li><strong>Flexibilidad de Red:</strong> Las rutas pueden ser reasignadas entre UFs según la demanda estacional o cambios urbanos, manteniendo siempre el historial de explotación.</li>
+                </ul>
+
+                <h3>Lógica de Geometría y Control Espacial</h3>
+                <p>La integración del esquema <code>geometria</code> es fundamental para la validación automática del cumplimiento:</p>
+                <ul>
+                    <li><strong>Historico de Itinerarios:</strong> Permite que una ruta evolucione geográficamente. Si una calle cambia de sentido, el sistema registra una nueva versión del trazado con una fecha de vigencia, asegurando que el monitoreo retrospectivo siempre use la geometría correcta.</li>
+                    <li><strong>Geocercas Especializadas:</strong> Cada itinerario posee su propio set de geocercas (Paradas, Terminales, Puntos de Control). Esto permite calcular el <em>cumplimiento de frecuencia y regularidad</em> basado en el paso real por puntos críticos.</li>
+                    <li><strong>Tipificación de Geocercas:</strong> Al diferenciar entre una terminal y una parada intermedia, la lógica de negocio puede aplicar penalizaciones o bonificaciones diferenciadas según el tipo de evento detectado.</li>
+                </ul>
+
+                <h3>Validación de Tablas Core y Geometría</h3>
+                <ul>
+                    <li><span class="check-icon">✓</span> <strong>unidades_funcionales:</strong> Define el alcance legal de la agrupación.</li>
+                    <li><span class="check-icon">✓</span> <strong>composicion_uf:</strong> Nexo temporal entre la red de rutas y las UFs.</li>
+                    <li><span class="check-icon">✓</span> <strong>uf_troncales:</strong> <span class="new-icon">[NUEVO]</span> Definición geográfica de corredores por UF.</li>
+                    <li><span class="check-icon">✓</span> <strong>historico_itinerario:</strong> Versiones geográficas (LineString) de los trazados.</li>
+                    <li><span class="check-icon">✓</span> <strong>geocercas:</strong> Puntos de control espaciales (Polygons/Points) vinculados al itinerario.</li>
+                </ul>
+
+                <h3>Resumen del Modelo Completo</h3>
+                <table class="table-summary">
+                    <thead>
+                        <tr>
+                            <th>Tabla</th>
+                            <th>Esquema</th>
+                            <th>Función Crítica</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>unidades_funcionales</td><td>gestion_uf</td><td>Entidad legal de agrupación de rutas.</td></tr>
+                        <tr><td>composicion_uf</td><td>gestion_uf</td><td>Relación N:M entre Rutas y UFs con vigencia.</td></tr>
+                        <tr><td>composicion_consorcio</td><td>gestion_uf</td><td>Define qué EOTs integran cada consorcio operador.</td></tr>
+                        <tr><td>uf_troncales</td><td>gestion_uf</td><td>Define rutas troncales y áreas de exclusión por UF.</td></tr>
+                        <tr><td>historico_itinerario</td><td>geometria</td><td>Mantiene el histórico de trazados geográficos por ruta.</td></tr>
+                        <tr><td>itinerario_parada</td><td>geometria</td><td>Relación N:M que secuencia paradas por itinerario.</td></tr>
+                        <tr><td>paradas_oficiales</td><td>geometria</td><td>Maestra de infraestructura física y paradas del sistema.</td></tr>
+                        <tr><td>geocercas</td><td>geometria</td><td>Define puntos de control para validación de servicios.</td></tr>
+                        <tr><td>tipos_geocerca</td><td>geometria</td><td>Clasifica los puntos (Parada, Terminal, etc).</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 style="margin-top: 40px;">8. Convergencia: GTFS Estándar vs. Arquitectura VMT-CID</h3>
+                <p>El sistema no solo genera los archivos necesarios para Google Maps, sino que provee una infraestructura de grado gubernamental para la fiscalización.</p>
+                <table class="table-summary">
+                    <thead>
+                        <tr>
+                            <th>Característica</th>
+                            <th>GTFS Estándar</th>
+                            <th>Modelo VMT-CID (GTFS+)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Ubicación y Paradas</td><td>✅ Sí</td><td>✅ Sí + Bearing (Precisión Rumbo)</td></tr>
+                        <tr><td>Horarios y Calendarios</td><td>✅ Sí</td><td>✅ Sí + Días Atípicos Dinámicos</td></tr>
+                        <tr><td>Trazados Geográficos</td><td>✅ Sí</td><td>✅ Sí + Historial de Versiones</td></tr>
+                        <tr><td>Gestión Legal</td><td>❌ No</td><td>✅ Sí (Unidades Funcionales / Consorcios)</td></tr>
+                        <tr><td>Auditoría Retroactiva</td><td>❌ Limitado</td><td>✅ Completo (Trazabilidad 4D)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="page-gtfs" class="page">
+            <div class="analysis-section">
+                <h2>🌎 Arquitectura GTFS+: Análisis de Convergencia</h2>
+                <p>Este informe detalla cómo el Sistema de Catálogos VMT-CID no solo cumple con el estándar internacional <strong>GTFS (General Transit Feed Specification)</strong>, sino que lo extiende mediante una arquitectura diseñada para la fiscalización masiva y el análisis histórico.</p>
+                
+                <h3>1. Cumplimiento del Estándar Base (GTFS Core)</h3>
+                <p>El sistema garantiza que todas las entidades posean los atributos requeridos por plataformas globales:</p>
+                <div class="table-detail-grid">
+                    <div class="entity-card">
+                        <h4>Agencia (agency.txt)</h4>
+                        <p>Mapeado a <code>public.eots</code>. Soporta zonas horarias, URLs y lenguajes oficiales.</p>
+                    </div>
+                    <div class="entity-card">
+                        <h4>Paradas (stops.txt)</h4>
+                        <p>Mapeado a <code>geometria.paradas_oficiales</code>. Soporta jerarquía (Parada -> Estación -> Terminal).</p>
+                    </div>
+                    <div class="entity-card">
+                        <h4>Rutas (routes.txt)</h4>
+                        <p>Mapeado a <code>public.lineas</code>. Define identidad comercial, colores y tipos de transporte (Bus=3).</p>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 40px;">2. Funcionalidades de Superioridad Técnica (El "Plus")</h3>
+                <p>Nuestra arquitectura supera las limitaciones del estándar GTFS tradicional en cuatro ejes críticos:</p>
+                
+                <div class="entity-card" style="margin-bottom: 15px;">
+                    <h4>2.1 Malla de Temporalidad (Trazabilidad 4D)</h4>
+                    <p>GTFS es estático. VMT-CID implementa temporalidad nativa en <code>linea_ruta_catalogo</code>, permitiendo reconstruir la red completa en cualquier segundo del pasado.</p>
+                </div>
+
+                <div class="entity-card" style="margin-bottom: 15px;">
+                    <h4>2.2 Precisión por Rumbo (Bearing)</h4>
+                    <p>GTFS solo usa proximidad. Nuestro sistema utiliza el <strong>Bearing (0-360°)</strong> para que la fiscalización descarte buses en sentido contrario, eliminando falsos positivos.</p>
+                </div>
+
+                <div class="entity-card" style="margin-bottom: 15px;">
+                    <h4>2.3 Motor de Calendarios Dinámicos</h4>
+                    <p>Manejo avanzado de <strong>Días Atípicos</strong> (feriados, clima) mediante <code>id_tipo_dia_aplicable</code>, permitiendo cambios operativos automatizados.</p>
+                </div>
+
+                <div class="entity-card">
+                    <h4>2.4 Unidades Funcionales (UFs)</h4>
+                    <p>Capa legal y territorial (Ley 7617) que agrupa líneas bajo Consorcios, vital para la gestión de subsidios y planeación urbana.</p>
+                </div>
+
+                <h3 style="margin-top: 40px;">3. Estado de Convergencia Final</h3>
+                <table class="table-summary">
+                    <thead>
+                        <tr>
+                            <th>Capacidad</th>
+                            <th>GTFS Estándar</th>
+                            <th>Sistema VMT-CID (GTFS+)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Ubicación de Paradas</td><td>✅ Sí</td><td>✅ Sí + Bearing (Precisión Rumbo)</td></tr>
+                        <tr><td>Horarios y Calendarios</td><td>✅ Sí</td><td>✅ Sí + Días Atípicos Dinámicos</td></tr>
+                        <tr><td>Trazados Geográficos</td><td>✅ Sí</td><td>✅ Sí + Historial de Versiones</td></tr>
+                        <tr><td>Gestión de Consorcios</td><td>❌ No</td><td>✅ Sí (Unidades Funcionales)</td></tr>
+                        <tr><td>Auditoría Retroactiva</td><td>❌ Limitado</td><td>✅ Completo (Trazabilidad 4D)</td></tr>
+                    </tbody>
+                </table>
+                
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; padding: 20px; border-radius: 12px; margin-top: 30px; text-align: center;">
+                    <strong>Conclusión Técnica:</strong> El modelo es <strong>GTFS-Ready</strong> para interoperabilidad externa y <strong>Enterprise-Ready</strong> para fiscalización interna estatal.
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById('page-' + pageId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        let scaleErdLineas = 1.0;
+        function zoomDiagram(containerId, factor) {
+            const container = document.getElementById(containerId);
+            const svg = container.querySelector('svg');
+            if (!svg) return;
+            
+            if (factor === 0) {
+                scaleErdLineas = 1.0;
+                svg.style.width = '';
+                svg.style.maxWidth = '';
+                svg.style.height = '';
+                return;
+            }
+            
+            scaleErdLineas = Math.min(Math.max(scaleErdLineas * factor, 0.4), 3.0);
+            
+            svg.style.width = (scaleErdLineas * 100) + '%';
+            svg.style.maxWidth = 'none';
+            svg.style.height = 'auto';
+        }
+
+        // Drag to scroll functionality
+        document.querySelectorAll('.diagram-container').forEach(container => {
+            let pos = { top: 0, left: 0, x: 0, y: 0 };
+            
+            container.style.cursor = 'grab';
+
+            const mouseDownHandler = function(e) {
+                container.style.cursor = 'grabbing';
+                container.style.userSelect = 'none';
+
+                pos = {
+                    left: container.scrollLeft,
+                    top: container.scrollTop,
+                    x: e.clientX,
+                    y: e.clientY,
+                };
+
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+            };
+
+            const mouseMoveHandler = function(e) {
+                const dx = e.clientX - pos.x;
+                const dy = e.clientY - pos.y;
+
+                container.scrollTop = pos.top - dy;
+                container.scrollLeft = pos.left - dx;
+            };
+
+            const mouseUpHandler = function() {
+                container.style.cursor = 'grab';
+                container.style.removeProperty('user-select');
+
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+            };
+
+            container.addEventListener('mousedown', mouseDownHandler);
+        });
+    </script>
+
+    <script type="module">
+        import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+        
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+
+        const diagramAnterior = `erDiagram
+            gremios ||--o{ eots : "agrupa"
+            eots ||--o{ catalogo_rutas : "explota (directo)"
+            catalogo_rutas ||--o{ historico_itinerario : "trazado"
+
+            gremios {
+                int gre_id PK
+                string gre_nombre
+            }
+            eots {
+                int eot_id PK
+                string eot_nombre
+                int gre_id FK
+            }
+            catalogo_rutas {
+                string ruta_hex PK
+                int id_eot_catalogo FK
+                string identificacion
+            }
+            historico_itinerario {
+                int id_itinerario PK
+                string ruta_hex FK
+                date fecha_inicio
+            }
+        `;
+
+        const diagramModificado = `erDiagram
+            gremios ||--o{ eots : "agrupa"
+            tipos_eot ||--o{ eots : "categoriza"
+            eots ||--o{ composicion_consorcio : "es_consorcio"
+            eots ||--o{ composicion_consorcio : "es_miembro"
+            eots ||--o{ historico_explotacion_ruta : "opera_directo"
+            eots ||--o{ historico_explotacion_uf : "opera_consorcio"
+            
+            unidades_funcionales ||--o{ composicion_uf : "agrupa"
+            unidades_funcionales ||--o{ historico_explotacion_uf : "explotada"
+            unidades_funcionales ||--o{ contratos : "legaliza"
+            unidades_funcionales ||--o{ uf_troncales : "posee"
+            uf_troncales ||--o{ geocercas : "geometria_control"
+            
+            catalogo_rutas ||--o{ composicion_uf : "integra"
+            catalogo_rutas ||--o{ historico_explotacion_ruta : "explotada"
+            catalogo_rutas ||--o{ historico_itinerario : "trazado"
+            eots ||--o{ catalogo_rutas : "explota (legacy)"
+ 
+            historico_itinerario ||--o{ geocercas : "contiene"
+            tipos_geocerca ||--o{ geocercas : "define"
+
+            eots {
+                int eot_id PK
+                string eot_nombre
+                boolean eot_UF
+                int id_tipo_eot FK
+            }
+            tipos_eot {
+                int id_tipo PK
+                string nombre
+            }
+            catalogo_rutas {
+                string ruta_hex PK
+                int id_eot_catalogo FK
+                string identificacion
+            }
+            unidades_funcionales {
+                int id_uf PK
+                string nombre_uf
+                string tipo_uf
+                boolean estado
+            }
+            composicion_uf {
+                int id_comp_uf PK
+                int id_uf FK
+                string ruta_hex FK
+            }
+            composicion_consorcio {
+                int id_comp_cons PK
+                int id_consorcio FK
+                int id_eot FK
+            }
+            contratos {
+                int id_contrato PK
+                string numero_contrato
+                int id_eot FK
+                int id_uf FK
+            }
+            historico_itinerario {
+                int id_itinerario PK
+                string ruta_hex FK
+                date fecha_inicio_vigencia
+                date fecha_fin_vigencia
+                geometry geom
+            }
+            geocercas {
+                int id_geocerca PK
+                int id_itinerario FK
+                int id_troncal_uf FK
+                int id_tipo FK
+                int orden
+                geometry geom
+            }
+            uf_troncales {
+                int id_troncal PK
+                int id_uf FK
+                string nombre
+                boolean es_principal
+                string color_hex
+                geometry geom
+            }
+            tipos_geocerca {
+                int id_tipo PK
+                string nombre
+            }
+        `;
+        const diagramPropuesto = `erDiagram
+            gremios ||--o{ eots : "agrupa"
+            tipos_eot ||--o{ eots : "categoriza"
+            eots ||--o{ composicion_consorcio : "es_consorcio"
+            eots ||--o{ composicion_consorcio : "es_miembro"
+            eots ||--o{ historico_explotacion_linea : "opera_directo"
+            eots ||--o{ historico_explotacion_uf : "opera_consorcio"
+            
+            unidades_funcionales ||--o{ composicion_uf : "agrupa"
+            unidades_funcionales ||--o{ historico_explotacion_uf : "explotada"
+            unidades_funcionales ||--o{ contratos : "legaliza"
+            
+            lineas ||--o{ composicion_uf : "integra"
+            lineas ||--o{ historico_explotacion_linea : "explotada"
+            zonas ||--o{ lineas : "agrupa"
+            eots ||--o{ lineas : "explota (legacy)"
+            
+            lineas ||--o{ linea_ruta_catalogo : "explotacion_temporal"
+            linea_ruta_catalogo ||--o{ catalogo_rutas : "vincula"
+            catalogo_rutas ||--o{ historico_itinerario : "trazado"
+            
+            historico_itinerario ||--o{ itinerario_parada : "secuencia"
+            paradas_oficiales ||--o{ itinerario_parada : "es_usada_en"
+
+            historico_itinerario ||--o{ geocercas : "geometria_control"
+            uf_troncales ||--o{ geocercas : "geometria_control"
+            unidades_funcionales ||--o{ uf_troncales : "posee"
+            tipos_geocerca ||--o{ geocercas : "define"
+
+            tipo_dia ||--o{ dias_atipicos : "se_aplica_en"
+            tipo_dia ||--o{ programacion_operativa : "define_calendario_de"
+            tipo_dia ||--o{ programacion_operativa_se : "define_calendario_de"
+            
+            linea_ruta_catalogo ||--o{ programacion_operativa : "se_programa_con"
+            
+            servicio_especial ||--o{ programacion_operativa_se : "tiene"
+            servicio_especial ||--o{ ruta_servicio_especial : "se_ejecuta_en"
+            servicio_especial ||--o{ adjudicacion_servicio : "se_adjudica_a"
+            adjudicacion_servicio ||--o{ bus_adjudicacion : "usa"
+            servicio_especial ||--o{ parametro_monitoreo : "se_controla_con"
+            
+            ruta_servicio_especial ||--o{ catalogo_rutas : "referencia"
+
+            eots {
+                int eot_id PK
+                string eot_nombre
+                int id_tipo_eot FK
+            }
+            tipo_dia {
+                int id_tipo_dia PK
+                string codigo
+            }
+            dias_atipicos {
+                date fecha PK
+                string tipo_atipico
+                int id_tipo_dia_aplicable FK
+            }
+            programacion_operativa {
+                int id_programacion PK
+                int id_linea_ruta_catalogo FK
+                time horario_salida
+                time horario_llegada
+                int id_tipo_dia FK
+                date fecha_inicio_vigencia
+                date fecha_fin_vigencia
+                int numero_servicio
+            }
+            programacion_operativa_se {
+                int id_programacion PK
+                time horario_salida
+                time horario_llegada
+                int id_tipo_dia FK
+                int id_servicio_especial FK
+                date fecha_inicio_vigencia
+                date fecha_fin_vigencia
+                int numero_servicio
+                string sentido
+            }
+            servicio_especial {
+                int id_servicio_especial PK
+                string nombre_servicio
+            }
+            parametro_monitoreo {
+                int id_parametro PK
+                int radio_geocerca_m
+                int rango_cumplimiento_pct
+            }
+            unidades_funcionales {
+                int id_uf PK
+                string nombre_uf
+            }
+            lineas {
+                int id_linea PK
+                int id_zona FK
+                string codigo_linea
+                string nombre_linea
+                int route_type
+                string route_text_color
+            }
+            zonas {
+                int id_zona PK
+                string nombre
+                string descripcion
+            }
+            linea_ruta_catalogo {
+                int id_linea_ruta_catalogo PK
+                int id_linea FK
+                string ruta_hex FK
+                date fecha_inicio
+                date fecha_fin
+            }
+            catalogo_rutas {
+                string ruta_hex PK
+                string identificacion_variante
+            }
+            historico_itinerario {
+                int id_itinerario PK
+                int id_ruta FK
+                geometry geom
+            }
+            itinerario_parada {
+                int id_itinerario PK, FK
+                int id_parada PK, FK
+                int orden
+            }
+            paradas_oficiales {
+                int id PK
+                string source_id
+                string source_name
+                float bearing
+                int location_type
+                string parent_station
+                geometry geom
+            }
+            geocercas {
+                int id_geocerca PK
+                int id_itinerario FK
+                int id_troncal_uf FK
+                geometry geom
+            }
+            uf_troncales {
+                int id_troncal PK
+                int id_uf FK
+                string nombre
+                boolean es_principal
+                string color_hex
+                geometry geom
+            }
+            composicion_uf {
+                int id_comp_uf PK
+                int id_uf FK
+                int id_linea FK
+            }
+            tipos_eot {
+                int id_tipo PK
+                string nombre
+            }
+            composicion_consorcio {
+                int id_comp_cons PK
+                int id_consorcio FK
+                int id_eot FK
+            }
+            contratos {
+                int id_contrato PK
+                string numero_contrato
+                int id_eot FK
+                int id_uf FK
+            }
+            tipos_geocerca {
+                int id_tipo PK
+                string nombre
+            }
+        `;
+
+        const render = async () => {
+            const { svg: svgAnt } = await mermaid.render('svg-ant', diagramAnterior);
+            document.getElementById('erd-anterior').innerHTML = svgAnt;
+            
+            const { svg: svgMod } = await mermaid.render('svg-mod', diagramModificado);
+            document.getElementById('erd-modificado').innerHTML = svgMod;
+
+            const { svg: svgLineas } = await mermaid.render('svg-lineas', diagramPropuesto);
+            document.getElementById('erd-lineas').innerHTML = svgLineas;
+        };
+
+        render();
+    </script>
+</body>
+</html>

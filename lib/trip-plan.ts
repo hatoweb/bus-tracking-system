@@ -19,53 +19,88 @@ export type TripLeg = {
     lat: number | null
     lng: number | null
   }
+  num_stops?: number
+  estimated_ride_min?: number
 }
 
-/** Plan directo (1 itinerario) o con transbordo (2 itinerarios unidos en C). */
+export type TripTransfer = {
+  id: number
+  name: string
+  lat: number | null
+  lng: number | null
+  type?: 'same_stop' | 'walk'
+  from_stop_id?: number
+  from_stop_name?: string
+  to_stop_id?: number
+  to_stop_name?: string
+  to_lat?: number | null
+  to_lng?: number | null
+  walk_distance_m?: number
+  walk_time_min?: number
+  dist_a_c_m?: number
+  dist_c_b_m?: number
+  total_m?: number
+}
+
+/** Plan directo (1 itinerario) o con transbordo (2 itinerarios). */
 export type TripPlanResult = {
   type: 'direct' | 'transfer'
   legs: TripLeg[]
-  transfer?: {
-    id: number
-    name: string
-    lat: number | null
-    lng: number | null
-    dist_a_c_m?: number
-    dist_c_b_m?: number
-    total_m?: number
-  }
+  transfer?: TripTransfer
   score: number
   /** Posición en la lista de opciones (1 = mejor) */
   rank?: number
+  walk_origin_m?: number
+  walk_dest_m?: number
+  walk_transfer_m?: number
+  total_walk_m?: number
+  total_walk_min?: number
+  total_ride_min?: number
+  total_duration_min?: number
 }
 
 export function formatTripPlanSummary(plan: TripPlanResult): string {
   if (plan.type === 'direct' && plan.legs[0]) {
     const l = plan.legs[0]
     const lineLabel = l.linea ? `L${l.linea}` : l.eot_nombre
-    return (
-      `Opción directa (1 itinerario · sentido A→B) · ${lineLabel} (${l.eot_nombre}). ` +
-      `Subí en ${l.boarding.name}; bajá en ${l.alighting.name}.`
-    )
+    const walkOri =
+      plan.walk_origin_m && plan.walk_origin_m > 30
+        ? `Caminá ${Math.round(plan.walk_origin_m)} m a ${l.boarding.name}. `
+        : `Subí en ${l.boarding.name}. `
+    const rideInfo =
+      l.num_stops != null && l.estimated_ride_min != null
+        ? `Viajá ${l.num_stops} paradas (~${Math.round(l.estimated_ride_min)} min) en ${lineLabel} (${l.eot_nombre}). `
+        : `Tomá ${lineLabel} (${l.eot_nombre}). `
+    const walkDst =
+      plan.walk_dest_m && plan.walk_dest_m > 30
+        ? `Bajá en ${l.alighting.name} y caminá ${Math.round(plan.walk_dest_m)} m a tu destino.`
+        : `Bajá en ${l.alighting.name}.`
+
+    return `Opción directa · ${lineLabel}: ${walkOri}${rideInfo}${walkDst}`
   }
+
   if (plan.type === 'transfer' && plan.legs.length >= 2) {
     const [a, b] = plan.legs
-    const t = plan.transfer?.name || a.alighting.name
-    const ac =
-      plan.transfer?.dist_a_c_m != null
-        ? ` A→C ${Math.round(plan.transfer.dist_a_c_m)} m`
-        : ''
-    const cb =
-      plan.transfer?.dist_c_b_m != null
-        ? ` · C→B ${Math.round(plan.transfer.dist_c_b_m)} m`
-        : ''
+    const lineA = a.linea ? `L${a.linea}` : a.eot_nombre
+    const lineB = b.linea ? `L${b.linea}` : b.eot_nombre
+
+    const isWalk =
+      plan.transfer?.type === 'walk' ||
+      (plan.transfer?.walk_distance_m != null &&
+        plan.transfer.walk_distance_m > 20)
+
+    const walkTransferTxt = isWalk
+      ? ` 2) Caminá ${Math.round(plan.transfer?.walk_distance_m || 0)} m a ${plan.transfer?.to_stop_name || b.boarding.name}.`
+      : ` 2) En la misma parada (${plan.transfer?.name || a.alighting.name}), hacé transbordo.`
+
     return (
-      `Opción con transbordo en ${t} (sentido A→C→B).` +
-      (ac || cb ? `${ac}${cb}.` : ' ') +
-      ` 1) ${a.linea ? `L${a.linea}` : a.eot_nombre}: ${a.boarding.name} → ${a.alighting.name}.` +
-      ` 2) ${b.linea ? `L${b.linea}` : b.eot_nombre}: ${b.boarding.name} → ${b.alighting.name}.`
+      `Opción con transbordo: ` +
+      `1) Tomá ${lineA} en ${a.boarding.name} hasta ${a.alighting.name}.` +
+      walkTransferTxt +
+      ` 3) Tomá ${lineB} hasta ${b.alighting.name}.`
     )
   }
+
   return 'Plan de viaje calculado.'
 }
 
@@ -74,7 +109,6 @@ function optionDedupeKey(plan: TripPlanResult): string {
   if (plan.type === 'direct' && plan.legs[0]) {
     const l = plan.legs[0]
     const linea = (l.linea || '').trim()
-    // Una opción directa por empresa (+ línea si existe); no repetir ramales/paradas.
     return `d|${l.cod_catalogo}|${linea}`
   }
   if (plan.type === 'transfer' && plan.legs.length >= 2) {
@@ -84,7 +118,7 @@ function optionDedupeKey(plan: TripPlanResult): string {
   return `x|${plan.legs.map((l) => l.id_itinerario).join('-')}`
 }
 
-/** Hasta 3 opciones: primero directos, luego transbordos más cortos (sin repetir empresa/línea). */
+/** Hasta N opciones: primero directos, luego transbordos (sin repetir empresa/línea). */
 export function buildTripOptions(
   direct: TripPlanResult[],
   transfers: TripPlanResult[],
@@ -101,7 +135,6 @@ export function buildTripOptions(
     out.push(plan)
   }
 
-  // Directos ya vienen ordenados por score; el primero de cada clave gana.
   for (const d of direct) pushUnique(d)
   for (const t of transfers) pushUnique(t)
 

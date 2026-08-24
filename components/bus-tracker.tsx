@@ -2380,11 +2380,19 @@ export function BusTracker() {
                             }`
                       const detail =
                         opt.type === "direct"
-                          ? `${opt.legs[0]?.boarding.name} → ${opt.legs[0]?.alighting.name}`
-                          : `Cambio en ${opt.transfer?.name || "punto C"}` +
-                            (opt.transfer?.total_m != null
-                              ? ` · ${Math.round(opt.transfer.total_m)} m (A→C→B)`
+                          ? `${opt.legs[0]?.boarding.name} → ${opt.legs[0]?.alighting.name}` +
+                            (opt.total_duration_min != null
+                              ? ` · ~${Math.round(opt.total_duration_min)} min`
                               : "")
+                          : (opt.transfer?.type === "walk" || (opt.transfer?.walk_distance_m != null && opt.transfer.walk_distance_m > 20))
+                            ? `Caminá ${Math.round(opt.transfer?.walk_distance_m || 0)} m: ${opt.transfer?.from_stop_name || "Bajada"} → ${opt.transfer?.to_stop_name || "Subida"}` +
+                              (opt.total_duration_min != null
+                                ? ` · ~${Math.round(opt.total_duration_min)} min total`
+                                : "")
+                            : `Cambio en ${opt.transfer?.name || "punto C"}` +
+                              (opt.total_duration_min != null
+                                ? ` · ~${Math.round(opt.total_duration_min)} min total`
+                                : "")
                       return (
                         <li key={`opt-${opt.rank}-${opt.type}-${opt.legs[0]?.id_itinerario}`}>
                           <button
@@ -2459,8 +2467,8 @@ export function BusTracker() {
                               </span>
                               <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">
                                 {opt.type === "direct"
-                                  ? "1 itinerario · sentido A→B"
-                                  : "2 itinerarios · sentido A→C→B"}
+                                  ? `1 itinerario · ${opt.legs[0]?.num_stops != null ? `${opt.legs[0].num_stops} paradas` : "sentido A→B"}${opt.total_walk_m != null ? ` · ${Math.round(opt.total_walk_m)} m a pie` : ""}`
+                                  : `2 itinerarios · ${opt.transfer?.type === "walk" ? `transbordo a pie (${Math.round(opt.transfer.walk_distance_m || 0)} m)` : "mismo punto"}${opt.total_walk_m != null ? ` · ${Math.round(opt.total_walk_m)} m a pie total` : ""}`}
                               </span>
                             </span>
                           </button>
