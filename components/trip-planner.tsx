@@ -29,6 +29,8 @@ export type TripPlanPayload = {
   destination: TripPlace
   codCatalogo: string
   empresaNombre?: string
+  /** Preferir / priorizar unidades con rampa */
+  necesitaAccesibilidad?: boolean
 }
 
 type SearchHit = {
@@ -357,6 +359,7 @@ export function TripPlanner({
 }: TripPlannerProps) {
   const [origin, setOrigin] = useState<TripPlace | null>(null)
   const [destination, setDestination] = useState<TripPlace | null>(null)
+  const [necesitaAccesibilidad, setNecesitaAccesibilidad] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [focusField, setFocusField] = useState<"origin" | "destination">(
     "destination"
@@ -483,6 +486,7 @@ export function TripPlanner({
       destination,
       codCatalogo: selectedCodCatalogo,
       empresaNombre: emp?.eot_nombre,
+      necesitaAccesibilidad,
     })
   }
 
@@ -655,6 +659,21 @@ export function TripPlanner({
                 ))}
               </select>
             </div>
+
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2 text-[11px] text-foreground">
+              <input
+                type="checkbox"
+                checked={necesitaAccesibilidad}
+                onChange={(e) => setNecesitaAccesibilidad(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 accent-primary"
+              />
+              <span>
+                <span className="font-semibold">♿ Necesito accesibilidad</span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  Priorizar buses con rampa (movilidad reducida).
+                </span>
+              </span>
+            </label>
 
             {formError && (
               <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive">

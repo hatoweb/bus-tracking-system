@@ -16,6 +16,12 @@ export type RealBus = {
   velocidad: number
   rumbo: number
   fecha_hora: string
+  /** null = sin match en registro_habilitacion */
+  tiene_rampa?: boolean | null
+  eta_minutos?: number | null
+  eot_nombre?: string
+  linea_label?: string
+  linea?: string
 }
 
 export type RealItinerary = {
@@ -961,7 +967,17 @@ export function RealRouteMap({
       const isSelected = bus.mean_id === selectedBusId
       const icon = createCustomIcon(bus, isSelected)
       const { statusLabel, color } = getBusStatusColor(bus.velocidad)
-      const lineaLabel = (bus as any).linea_label || bus.route_id || "N/A"
+      const lineaLabel = bus.linea_label || bus.route_id || "N/A"
+      const rampInfo =
+        bus.tiene_rampa === true
+          ? `<span style="color:#047857;font-weight:600;">♿ Unidad con rampa</span>`
+          : bus.tiene_rampa === false
+            ? `<span style="color:#a16207;">Sin rampa registrada</span>`
+            : `<span style="color:#78716c;">⚠ Sin información de accesibilidad</span>`
+      const etaInfo =
+        bus.eta_minutos != null
+          ? `<b>ETA:</b> ~${bus.eta_minutos} min<br/>`
+          : ""
       const popupHtml = `
             <div style="font-family: sans-serif; font-size: 12px; padding: 2px;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
@@ -973,8 +989,9 @@ export function RealRouteMap({
                 </span>
               </div>
               <b>Línea:</b> ${lineaLabel}<br/>
-              <b>Agencia:</b> ${(bus as any).eot_nombre || bus.agency_id || "N/A"}<br/>
-              <b>Chofer:</b> ${bus.driver_id || "N/A"}<br/>
+              <b>Agencia:</b> ${bus.eot_nombre || bus.agency_id || "N/A"}<br/>
+              ${etaInfo}
+              ${rampInfo}<br/>
               <b>Velocidad:</b> ${bus.velocidad || 0} km/h<br/>
               <b>Última actualización:</b> ${new Date(bus.fecha_hora).toLocaleTimeString()}<br/>
             </div>

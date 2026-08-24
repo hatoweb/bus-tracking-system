@@ -40,6 +40,7 @@ import { TripPlanner, type TripPlanPayload, type TripPlace } from "@/components/
 import dynamic from "next/dynamic"
 import { type RealBus, type RealItinerary, type RealStop, type NearbyStop } from "@/components/real-route-map"
 import { apiUrl } from "@/lib/base-path"
+import { estimateEtaMinutes } from "@/lib/bus-accesibilidad"
 import { formatTripPlanSummary, type TripPlanResult } from "@/lib/trip-plan"
 
 const RealRouteMap = dynamic(
@@ -223,6 +224,7 @@ export function BusTracker() {
     catalogos: number[]
     lineas: string[]
   } | null>(null)
+  const [needsAccessibility, setNeedsAccessibility] = useState(false)
   const [selectedBoardingStopId, setSelectedBoardingStopId] = useState<number | null>(null)
   const [boardingRouteLoading, setBoardingRouteLoading] = useState(false)
 
@@ -636,6 +638,7 @@ export function BusTracker() {
       setTripGuidance(null)
       setTripRouteCoords(null)
       setTripBusFilter(null)
+      setNeedsAccessibility(Boolean(plan.necesitaAccesibilidad))
       setSelectedBoardingStopId(null)
       setShowMoreStops(false)
       showMoreStopsRef.current = false
@@ -1723,6 +1726,9 @@ export function BusTracker() {
           distanceMeters,
           velocidad: sanitizeSpeedKmh(rb.velocidad),
           passedBoardingStop,
+          eta_minutos:
+            (rb as RealBusWithDistance).eta_minutos ??
+            estimateEtaMinutes(distanceMeters, sanitizeSpeedKmh(rb.velocidad)),
         }
       })
 
@@ -1738,10 +1744,15 @@ export function BusTracker() {
               const ap = a.passedBoardingStop ? 1 : 0
               const bp = b.passedBoardingStop ? 1 : 0
               if (ap !== bp) return ap - bp
+              if (needsAccessibility) {
+                const ar = a.tiene_rampa === true ? 0 : a.tiene_rampa === false ? 1 : 2
+                const br = b.tiene_rampa === true ? 0 : b.tiene_rampa === false ? 1 : 2
+                if (ar !== br) return ar - br
+              }
               return (a.distanceMeters || 0) - (b.distanceMeters || 0)
             })
             .slice(0, 12)
-        : prepareClosestLineBuses(enriched, 3)
+        : prepareClosestLineBuses(enriched, 3, needsAccessibility)
       setClosestBuses(closest)
 
       if (closest.length > 0) {
@@ -1812,6 +1823,7 @@ export function BusTracker() {
     selectedBoardingStopId,
     tripDestination,
     tripBusFilter,
+    needsAccessibility,
   ])
 
   // Reloj en vivo
@@ -2280,6 +2292,7 @@ export function BusTracker() {
                     maxLines={tripBusFilter ? 8 : 3}
                     avgSpeedKmh={avgBusSpeedKmh}
                     userHasLocation={Boolean(user?.locationShared && user.lat && user.lng)}
+                    preferAccessible={needsAccessibility}
                   />
                 ) : (
                   <BusList buses={buses} selectedBusId={selectedBusId} onSelectBus={handleSelectBus} />

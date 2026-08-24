@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolGPS, poolCID } from '@/lib/db'
+import {
+  enrichBusesWithAccesibilidad,
+  estimateEtaMinutes,
+} from '@/lib/bus-accesibilidad'
 
 // Helper para distancia Haversine (en metros)
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -33,6 +37,10 @@ export async function GET(request: NextRequest) {
     const eotId = searchParams.get('eot_id')
     const codCatalogo = searchParams.get('cod_catalogo')
     const limitPerBus = parseInt(searchParams.get('limit_per_bus') || '2')
+
+    const soloAccesibles = searchParams.get('solo_accesibles') === 'true'
+    const userLat = searchParams.get('lat') ? Number(searchParams.get('lat')) : null
+    const userLng = searchParams.get('lng') ? Number(searchParams.get('lng')) : null
 
     // Si se pasa eot_id o cod_catalogo, obtener id_eot_vmt_hex desde public.eots en BBDD_CID
     if (!agencyId && (eotId || codCatalogo)) {
@@ -187,11 +195,40 @@ export async function GET(request: NextRequest) {
       return latest
     })
 
+    let withAccess = await enrichBusesWithAccesibilidad(processedBuses)
+
+    if (
+      userLat != null &&
+      userLng != null &&
+      Number.isFinite(userLat) &&
+      Number.isFinite(userLng)
+    ) {
+      withAccess = withAccess.map((b) => {
+        const distanceMeters = Math.round(
+          calculateDistanceMeters(
+            userLat,
+            userLng,
+            parseFloat(String(b.latitude)),
+            parseFloat(String(b.longitude))
+          )
+        )
+        return {
+          ...b,
+          distanceMeters,
+          eta_minutos: estimateEtaMinutes(distanceMeters, Number(b.velocidad)),
+        }
+      })
+    }
+
+    if (soloAccesibles) {
+      withAccess = withAccess.filter((b) => b.tiene_rampa === true)
+    }
+
     return NextResponse.json({ 
       success: true, 
-      count: processedBuses.length,
+      count: withAccess.length,
       agency_id: agencyId, 
-      data: processedBuses 
+      data: withAccess 
     })
   } catch (error: any) {
     console.error('Error fetching GPS buses:', error)

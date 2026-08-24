@@ -1,8 +1,9 @@
 "use client"
 
-import { Bus as BusIcon, Gauge, Clock, MapPin } from "lucide-react"
+import { Accessibility, AlertTriangle, Bus as BusIcon, Clock, Gauge, MapPin } from "lucide-react"
 import { type RealBus } from "@/components/real-route-map"
 import { STATUS_LABEL, STATUS_COLOR_VAR, type BusStatus } from "@/lib/transit-data"
+import { formatDistanceLabel } from "@/lib/bus-accesibilidad"
 
 export type RealBusWithDistance = RealBus & {
   distanceMeters?: number
@@ -13,6 +14,8 @@ export type RealBusWithDistance = RealBus & {
   velocidad_calculada?: number
   /** Ya pasó la parada de abordaje del viaje (no sirve subir) */
   passedBoardingStop?: boolean
+  tiene_rampa?: boolean | null
+  eta_minutos?: number | null
 }
 
 type RealBusListProps = {
@@ -24,6 +27,8 @@ type RealBusListProps = {
   maxLines?: number
   avgSpeedKmh?: number | null
   userHasLocation?: boolean
+  /** Prioriza / filtra unidades con rampa (movilidad reducida) */
+  preferAccessible?: boolean
 }
 
 export function getRealBusStatusKey(velocidad: number): BusStatus {
@@ -33,10 +38,17 @@ export function getRealBusStatusKey(velocidad: number): BusStatus {
   return "moving"
 }
 
+function accessibilityRank(bus: RealBusWithDistance): number {
+  if (bus.tiene_rampa === true) return 0
+  if (bus.tiene_rampa === false) return 1
+  return 2
+}
+
 /** Una entrada por mean_id, con distancia opcional, ordenada de más cerca a más lejos. */
 export function prepareClosestLineBuses(
   buses: RealBusWithDistance[],
-  maxLines = 3
+  maxLines = 3,
+  preferAccessible = false
 ): RealBusWithDistance[] {
   const unique = Array.from(new Map(buses.map((b) => [b.mean_id, b])).values())
 
@@ -48,25 +60,67 @@ export function prepareClosestLineBuses(
     return unique.slice(0, maxLines)
   }
 
-  // Preferir buses que aún no pasaron la parada; luego por distancia
+  // Preferir buses que aún no pasaron la parada; con PMR priorizar rampa; luego distancia
   const ranked = [...withDist].sort((a, b) => {
     const ap = a.passedBoardingStop ? 1 : 0
     const bp = b.passedBoardingStop ? 1 : 0
     if (ap !== bp) return ap - bp
+    if (preferAccessible) {
+      const ar = accessibilityRank(a)
+      const br = accessibilityRank(b)
+      if (ar !== br) return ar - br
+    }
     return (a.distanceMeters || 0) - (b.distanceMeters || 0)
   })
 
   // Una por línea (linea_label / route_id); si no hay, por mean_id
   const byLine = new Map<string, RealBusWithDistance>()
   for (const bus of ranked) {
+    if (preferAccessible && bus.tiene_rampa !== true && bus.tiene_rampa != null) {
+      // Si hay necesidad PMR, no ocultar sin rampa del todo: seguir mostrando pero
+      // solo como fallback si no hay ninguna con rampa de esa línea.
+    }
     const key =
       String(
         bus.linea_label || bus.linea || bus.route_id || `bus:${bus.mean_id}`
       ).trim() || `bus:${bus.mean_id}`
-    if (!byLine.has(key)) byLine.set(key, bus)
-    if (byLine.size >= maxLines) break
+    const prev = byLine.get(key)
+    if (!prev) {
+      byLine.set(key, bus)
+    } else if (
+      preferAccessible &&
+      prev.tiene_rampa !== true &&
+      bus.tiene_rampa === true
+    ) {
+      byLine.set(key, bus)
+    }
+    if (byLine.size >= maxLines && !preferAccessible) break
   }
-  return Array.from(byLine.values())
+  return Array.from(byLine.values()).slice(0, maxLines)
+}
+
+function AccessibilityBadge({ tieneRampa }: { tieneRampa: boolean | null | undefined }) {
+  if (tieneRampa === true) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+        <Accessibility className="h-3 w-3" aria-hidden="true" />
+        Unidad con rampa
+      </span>
+    )
+  }
+  if (tieneRampa === false) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+        Sin rampa
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+      Sin info. de accesibilidad
+    </span>
+  )
 }
 
 export function RealBusList({
@@ -77,6 +131,7 @@ export function RealBusList({
   maxLines = 3,
   avgSpeedKmh = null,
   userHasLocation = false,
+  preferAccessible = false,
 }: RealBusListProps) {
   if (!buses || buses.length === 0) {
     return (
@@ -87,18 +142,25 @@ export function RealBusList({
   }
 
   const displayBuses = onlyClosestLines
-    ? prepareClosestLineBuses(buses, maxLines)
-    : Array.from(new Map(buses.map((b) => [b.mean_id, b])).values()).sort(
-        (a, b) => {
+    ? prepareClosestLineBuses(buses, maxLines, preferAccessible)
+    : Array.from(new Map(buses.map((b) => [b.mean_id, b])).values())
+        .sort((a, b) => {
           const ap = a.passedBoardingStop ? 1 : 0
           const bp = b.passedBoardingStop ? 1 : 0
           if (ap !== bp) return ap - bp
+          if (preferAccessible) {
+            const ar = accessibilityRank(a)
+            const br = accessibilityRank(b)
+            if (ar !== br) return ar - br
+          }
           return (a.distanceMeters || 0) - (b.distanceMeters || 0)
-        }
-      )
+        })
+        .slice(0, preferAccessible ? Math.max(maxLines, 8) : maxLines * 4)
 
   const closest =
-    displayBuses.find((b) => !b.passedBoardingStop) || displayBuses[0]
+    displayBuses.find((b) => !b.passedBoardingStop && (!preferAccessible || b.tiene_rampa === true)) ||
+    displayBuses.find((b) => !b.passedBoardingStop) ||
+    displayBuses[0]
   const saneSpeeds = displayBuses
     .map((b) => {
       const n = Number(b.velocidad)
@@ -121,10 +183,18 @@ export function RealBusList({
             <p className="font-semibold">
               Línea más cercana:{" "}
               <span className="text-primary">
-                {closest.route_id ? `L-${closest.route_id}` : `Bus #${closest.mean_id}`}
+                {closest.linea_label ||
+                  closest.linea ||
+                  (closest.route_id ? `L-${closest.route_id}` : `Bus #${closest.mean_id}`)}
               </span>
               {" · "}
-              {Math.round(closest.distanceMeters)} m
+              {formatDistanceLabel(closest.distanceMeters)}
+              {closest.eta_minutos != null && ` · ETA ~${closest.eta_minutos} min`}
+            </p>
+          )}
+          {preferAccessible && (
+            <p className="mt-0.5 text-[10px] text-emerald-800">
+              Priorizando unidades con rampa (movilidad reducida).
             </p>
           )}
           {computedAvg != null && (
@@ -209,8 +279,7 @@ export function RealBusList({
                       </span>
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
-                      {(bus as any).eot_nombre || `Agencia: ${bus.agency_id || "N/D"}`}
-                      {bus.driver_id ? ` · Chofer: ${bus.driver_id}` : ""}
+                      {bus.eot_nombre || `Agencia: ${bus.agency_id || "N/D"}`}
                       {" · "}
                       {passed ? (
                         <span className="font-semibold text-slate-600">
@@ -220,6 +289,9 @@ export function RealBusList({
                         <span className="font-semibold text-emerald-700">en movimiento</span>
                       )}
                     </p>
+                    <div className="mt-1.5">
+                      <AccessibilityBadge tieneRampa={bus.tiene_rampa} />
+                    </div>
                   </div>
                 </div>
 
@@ -239,13 +311,20 @@ export function RealBusList({
                       }`}
                     >
                       <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                      {Math.round(dist)} m
+                      Bus a {formatDistanceLabel(dist)}
                     </span>
                   )}
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                    {bus.fecha_hora ? new Date(bus.fecha_hora).toLocaleTimeString() : "Ahora"}
-                  </span>
+                  {bus.eta_minutos != null ? (
+                    <span className="flex items-center gap-1 font-semibold text-foreground">
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                      ETA: ~{bus.eta_minutos} min
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                      {bus.fecha_hora ? new Date(bus.fecha_hora).toLocaleTimeString() : "Ahora"}
+                    </span>
+                  )}
                 </div>
               </button>
             </li>

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { poolCID, poolGPS } from '@/lib/db'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
+import {
+  enrichBusesWithAccesibilidad,
+  estimateEtaMinutes,
+} from '@/lib/bus-accesibilidad'
 
 function calculateDistanceMeters(
   lat1: number,
@@ -28,6 +32,7 @@ export async function GET(request: NextRequest) {
     const catalogosRaw = searchParams.get('cod_catalogos') || ''
     const lineasRaw = searchParams.get('lineas') || ''
     const soloMovimiento = searchParams.get('solo_en_movimiento') !== 'false'
+    const soloAccesibles = searchParams.get('solo_accesibles') === 'true'
     const userLat = searchParams.get('lat') ? Number(searchParams.get('lat')) : null
     const userLng = searchParams.get('lng') ? Number(searchParams.get('lng')) : null
     const minSpeed = Math.max(0, Number(searchParams.get('min_velocidad') || '1'))
@@ -234,7 +239,20 @@ export async function GET(request: NextRequest) {
       buses.push(latest)
     }
 
-    buses.sort(
+    let enriched = await enrichBusesWithAccesibilidad(buses)
+    enriched = enriched.map((b) => ({
+      ...b,
+      eta_minutos: estimateEtaMinutes(
+        b.distanceMeters as number | undefined,
+        Number(b.velocidad)
+      ),
+    }))
+
+    if (soloAccesibles) {
+      enriched = enriched.filter((b) => b.tiene_rampa === true)
+    }
+
+    enriched.sort(
       (a, b) =>
         (a.distanceMeters ?? Number.POSITIVE_INFINITY) -
         (b.distanceMeters ?? Number.POSITIVE_INFINITY)
@@ -242,12 +260,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      count: buses.length,
+      count: enriched.length,
       solo_en_movimiento: soloMovimiento,
+      solo_accesibles: soloAccesibles,
       agencies: agencyIds,
       rutas: [...rutaHexSet],
       lineas_filtradas: lineas,
-      data: buses,
+      data: enriched,
     })
   } catch (error: any) {
     console.error('Error buses-relevantes:', error)
