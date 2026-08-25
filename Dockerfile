@@ -7,8 +7,10 @@ RUN corepack enable
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --ignore-scripts
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+# Preferir npm (package-lock) si existe; si no, pnpm
+RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts; \
+    else corepack enable && pnpm install --ignore-scripts; fi
 
 # Builder stage
 FROM base AS builder
@@ -21,7 +23,7 @@ ARG BASE_PATH=/prototipo_vmt
 ENV BASE_PATH=$BASE_PATH
 ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm run build
+RUN if [ -f package-lock.json ]; then npm run build; else corepack enable && pnpm run build; fi
 
 # Runner stage
 FROM base AS runner

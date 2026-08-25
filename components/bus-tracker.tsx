@@ -35,6 +35,7 @@ import { SchedulePanel } from "@/components/schedule-panel"
 import { ItineraryPanel } from "@/components/itinerary-panel"
 import { StopsPanel } from "@/components/stops-panel"
 import { FeedbackPanel } from "@/components/feedback-panel"
+import { useSession } from "next-auth/react"
 import { GoogleAuthModal, type UserProfile } from "@/components/google-auth-modal"
 import { AlertsModal } from "@/components/alerts-modal"
 import { TripPlanner, type TripPlanPayload, type TripPlace } from "@/components/trip-planner"
@@ -151,6 +152,7 @@ async function fetchOsrmFootRoute(
 }
 
 export function BusTracker() {
+  const { data: session, status: sessionStatus } = useSession()
   const [buses, setBuses] = useState<Bus[]>(INITIAL_BUSES)
   const [realBuses, setRealBuses] = useState<RealBus[]>([])
   const [realItineraries, setRealItineraries] = useState<RealItinerary[]>([])
@@ -266,6 +268,23 @@ export function BusTracker() {
   /** Paradas de bajada cercanas al destino */
   const tripAlightingIdsRef = useRef<Set<number>>(new Set())
   const selectedBoardingStopIdRef = useRef<number | null>(null)
+
+  // Sincronizar perfil local con sesión Google (Auth.js)
+  useEffect(() => {
+    if (sessionStatus === "loading") return
+    if (session?.user?.email) {
+      setUser((prev) => ({
+        name: session.user?.name || prev?.name || "Usuario",
+        email: session.user?.email || "",
+        picture: session.user?.image || prev?.picture,
+        lat: prev?.lat,
+        lng: prev?.lng,
+        locationShared: prev?.locationShared ?? false,
+      }))
+    } else if (sessionStatus === "unauthenticated") {
+      setUser(null)
+    }
+  }, [session, sessionStatus])
 
   // Cargar lista de empresas
   useEffect(() => {
@@ -3077,11 +3096,6 @@ export function BusTracker() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         user={user}
-        onLogin={(u) => {
-          setUser(u)
-          setIsAuthModalOpen(false)
-          handleShareLocation()
-        }}
         onLogout={() => {
           stopLocationWatch()
           setNearbyStops([])
