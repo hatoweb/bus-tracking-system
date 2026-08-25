@@ -1,39 +1,39 @@
 import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
-import type { NextAuthConfig } from "next-auth"
-import { getBasePath } from "@/lib/base-path"
 
 /**
- * Auth.js (next-auth v5) + Google / Gmail.
+ * Auth.js v5 + Google.
  *
- * Con next.config basePath=/prototipo_vmt hay que declarar el mismo
- * prefijo en Auth.js y reinyectarlo en la route (ver [...nextauth]/route.ts).
+ * IMPORTANTE: no capturar AUTH_* en constantes al cargar el módulo
+ * (en `next build` suelen estar vacías y quedan “horneadas” → 500 Configuration).
+ * Auth.js lee solo en runtime:
+ *   AUTH_SECRET, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_URL, AUTH_TRUST_HOST
  *
- * .env:
- *   AUTH_SECRET=...
- *   AUTH_TRUST_HOST=true
- *   AUTH_URL=https://sistemas.mopc.gov.py/prototipo_vmt
- *   AUTH_GOOGLE_ID=...
- *   AUTH_GOOGLE_SECRET=...
+ * Con next.config basePath=/prototipo_vmt, las rutas internas son /api/auth/*
+ * (Next quita el prefijo). El cliente usa SessionProvider basePath con el prefijo público.
  */
-const appBase = getBasePath()
-const authBasePath = appBase ? `${appBase}/api/auth` : "/api/auth"
-
-const googleId =
-  process.env.AUTH_GOOGLE_ID?.trim() ||
-  process.env.GOOGLE_CLIENT_ID?.trim() ||
-  ""
-const googleSecret =
-  process.env.AUTH_GOOGLE_SECRET?.trim() ||
-  process.env.GOOGLE_CLIENT_SECRET?.trim() ||
-  ""
-
-const secret =
-  process.env.AUTH_SECRET?.trim() ||
-  process.env.NEXTAUTH_SECRET?.trim() ||
-  ""
+function appBase(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_BASE_PATH ||
+    process.env.BASE_PATH ||
+    ""
+  if (!raw || raw === "/") return ""
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw
+}
 
 export function authConfigStatus() {
+  const secret =
+    process.env.AUTH_SECRET?.trim() ||
+    process.env.NEXTAUTH_SECRET?.trim() ||
+    ""
+  const googleId =
+    process.env.AUTH_GOOGLE_ID?.trim() ||
+    process.env.GOOGLE_CLIENT_ID?.trim() ||
+    ""
+  const googleSecret =
+    process.env.AUTH_GOOGLE_SECRET?.trim() ||
+    process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+    ""
   return {
     hasSecret: Boolean(secret),
     hasGoogleId: Boolean(googleId),
@@ -42,97 +42,64 @@ export function authConfigStatus() {
       process.env.AUTH_URL?.trim() ||
       process.env.NEXTAUTH_URL?.trim() ||
       null,
-    authBasePath,
+    authBasePath: "/api/auth",
+    appBase: appBase() || "/",
   }
 }
 
-const providers: NextAuthConfig["providers"] = []
-if (googleId && googleSecret) {
-  providers.push(
-    Google({
-      clientId: googleId,
-      clientSecret: googleSecret,
-      authorization: {
-        params: {
-          prompt: "select_account",
-          access_type: "offline",
-          response_type: "code",
-        },
-      },
-    })
-  )
-} else {
-  console.warn(
-    "[auth] Faltan AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET — el login con Google no estará disponible."
-  )
-}
-
-if (!secret) {
-  console.error(
-    "[auth] Falta AUTH_SECRET en el entorno. Generá uno con: openssl rand -base64 32"
-  )
-}
-
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  basePath: authBasePath,
-  secret: secret || undefined,
+  // Dejar que Auth.js tome AUTH_SECRET / AUTH_GOOGLE_* del entorno en runtime
   trustHost: true,
-  providers,
+  providers: [Google],
   pages: {
-    // Auth.js redirige con path absoluto desde el dominio (no aplica solo el basePath de Next)
-    signIn: appBase ? `${appBase}/login` : "/login",
-    error: appBase ? `${appBase}/login` : "/login",
+    // Path de la app Next (con basePath lo resuelve el framework en páginas;
+    // Auth.js a veces redirige en absoluto → usamos callback redirect)
+    signIn: "/login",
+    error: "/login",
   },
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-authjs.session-token"
-          : "authjs.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
   callbacks: {
     async redirect({ url, baseUrl }) {
+      const base = appBase()
+      const authUrl = (
+        process.env.AUTH_URL ||
+        process.env.NEXTAUTH_URL ||
+        ""
+      ).replace(/\/$/, "")
+
       const origin = (() => {
         try {
-          return new URL(
-            process.env.AUTH_URL || process.env.NEXTAUTH_URL || baseUrl
-          ).origin
+          return authUrl ? new URL(authUrl).origin : baseUrl
         } catch {
           return baseUrl
         }
       })()
-      const appRoot = `${origin}${appBase || ""}`
+
+      const appRoot = authUrl || `${origin}${base}`
 
       if (url.startsWith(appRoot)) return url
-      if (url.startsWith(origin) && appBase && url.includes(appBase)) return url
 
       if (url.startsWith("/")) {
-        if (appBase && url.startsWith(appBase)) return `${origin}${url}`
+        // /login → https://host/prototipo_vmt/login
+        if (base && url.startsWith(base)) return `${origin}${url}`
         return `${appRoot}${url === "/" ? "" : url}`
       }
 
       try {
         const u = new URL(url)
         if (u.origin === origin) {
-          if (appBase && !u.pathname.startsWith(appBase)) {
-            u.pathname = `${appBase}${u.pathname}`
+          if (base && !u.pathname.startsWith(base)) {
+            u.pathname = `${base}${u.pathname}`
           }
           return u.toString()
         }
       } catch {
         /* ignore */
       }
+
       return appRoot || baseUrl
     },
     async jwt({ token, profile }) {

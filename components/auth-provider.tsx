@@ -5,14 +5,10 @@ import { getBasePath } from "@/lib/base-path"
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const base = getBasePath()
-  // Con next.config basePath, Auth.js vive en {basePath}/api/auth
+  // URL pública que ve el browser (con prefijo /prototipo_vmt)
   const authBase = base ? `${base}/api/auth` : "/api/auth"
   return (
-    <SessionProvider
-      basePath={authBase}
-      refetchInterval={5 * 60}
-      refetchOnWindowFocus
-    >
+    <SessionProvider basePath={authBase} refetchOnWindowFocus>
       {children}
     </SessionProvider>
   )

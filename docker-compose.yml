@@ -20,7 +20,7 @@ services:
       # Auth.js: AUTH_* deben estar en .env (AUTH_SECRET, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET)
       AUTH_URL: ${AUTH_URL:-https://sistemas.mopc.gov.py/prototipo_vmt}
       AUTH_TRUST_HOST: "true"
-      # Si .env no define la URL, no usar 127.0.0.1 dentro del contenedor
+      # No definir AUTH_SECRET aquí: debe venir del .env en runtime (no en build)
       GEO_ITINERARIOS_URL: ${GEO_ITINERARIOS_URL:-http://host.docker.internal:8020}
     extra_hosts:
       - "host.docker.internal:host-gateway"
