@@ -25,6 +25,10 @@ const secret =
   process.env.NEXTAUTH_SECRET?.trim() ||
   ""
 
+const useSecureCookies =
+  (process.env.AUTH_URL || "").startsWith("https://") ||
+  process.env.NODE_ENV === "production"
+
 export function authConfigStatus() {
   return {
     hasSecret: Boolean(secret),
@@ -65,7 +69,6 @@ if (!secret) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Sin secret Auth.js responde 500 en /api/auth/session
   secret: secret || undefined,
   trustHost: true,
   providers,
@@ -77,19 +80,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  callbacks: {
-    authorized({ auth: session, request }) {
-      const path = request.nextUrl.pathname
-      const isPublic =
-        path.includes("/login") ||
-        path.includes("/api/auth") ||
-        path.includes("/api/health") ||
-        path.includes("/favicon") ||
-        path.includes("/icon")
-
-      if (isPublic) return true
-      return !!session
+  // Cookie en path / para que sirva a /prototipo_vmt/api/* y no solo a /api/auth
+  cookies: {
+    sessionToken: {
+      name: useSecureCookies
+        ? "__Secure-authjs.session-token"
+        : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+      },
     },
+  },
+  callbacks: {
     async jwt({ token, profile }) {
       if (profile && "picture" in profile && profile.picture) {
         token.picture = profile.picture as string

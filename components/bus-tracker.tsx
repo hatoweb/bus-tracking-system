@@ -272,6 +272,14 @@ export function BusTracker() {
   // Sincronizar perfil local con sesión Google (Auth.js)
   useEffect(() => {
     if (sessionStatus === "loading") return
+    if (sessionStatus === "unauthenticated") {
+      setUser(null)
+      const login = apiUrl("/login")
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+        window.location.href = login
+      }
+      return
+    }
     if (session?.user?.email) {
       setUser((prev) => ({
         name: session.user?.name || prev?.name || "Usuario",
@@ -281,8 +289,6 @@ export function BusTracker() {
         lng: prev?.lng,
         locationShared: prev?.locationShared ?? false,
       }))
-    } else if (sessionStatus === "unauthenticated") {
-      setUser(null)
     }
   }, [session, sessionStatus])
 
