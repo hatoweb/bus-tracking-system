@@ -79,8 +79,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers,
   pages: {
-    signIn: "/login",
-    error: "/login",
+    // Auth.js redirige con path absoluto desde el dominio (no aplica solo el basePath de Next)
+    signIn: appBase ? `${appBase}/login` : "/login",
+    error: appBase ? `${appBase}/login` : "/login",
   },
   session: {
     strategy: "jwt",
@@ -101,6 +102,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      const origin = (() => {
+        try {
+          return new URL(
+            process.env.AUTH_URL || process.env.NEXTAUTH_URL || baseUrl
+          ).origin
+        } catch {
+          return baseUrl
+        }
+      })()
+      const appRoot = `${origin}${appBase || ""}`
+
+      if (url.startsWith(appRoot)) return url
+      if (url.startsWith(origin) && appBase && url.includes(appBase)) return url
+
+      if (url.startsWith("/")) {
+        if (appBase && url.startsWith(appBase)) return `${origin}${url}`
+        return `${appRoot}${url === "/" ? "" : url}`
+      }
+
+      try {
+        const u = new URL(url)
+        if (u.origin === origin) {
+          if (appBase && !u.pathname.startsWith(appBase)) {
+            u.pathname = `${appBase}${u.pathname}`
+          }
+          return u.toString()
+        }
+      } catch {
+        /* ignore */
+      }
+      return appRoot || baseUrl
+    },
     async jwt({ token, profile }) {
       if (profile && "picture" in profile && profile.picture) {
         token.picture = profile.picture as string

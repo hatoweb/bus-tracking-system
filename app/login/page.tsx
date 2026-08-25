@@ -37,10 +37,12 @@ function LoginInner() {
             <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
               No se pudo iniciar sesión
               {error === "Configuration"
-                ? ": el servidor no tiene AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET en el .env. Revisá /prototipo_vmt/api/health → auth."
+                ? ": error de configuración OAuth. Verificá AUTH_* en el .env y que el Redirect URI en Google sea exactamente https://sistemas.mopc.gov.py/prototipo_vmt/api/auth/callback/google"
                 : error === "AccessDenied"
                   ? ": acceso denegado."
-                  : `. (${error})`}
+                  : error === "OAuthCallback" || error === "Callback"
+                    ? ": falló el retorno desde Google (revisá Redirect URI y AUTH_URL)."
+                    : `. (${error})`}
             </p>
           )}
 
