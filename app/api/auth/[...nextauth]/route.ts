@@ -22,22 +22,26 @@ async function withBasePath(
   }
 
   const headers = new Headers(req.headers)
-  // Ayuda a Auth.js detrás de nginx
   if (!headers.get("x-forwarded-host")) {
     headers.set("x-forwarded-host", headers.get("host") || url.host)
   }
   if (!headers.get("x-forwarded-proto")) {
-    headers.set("x-forwarded-proto", url.protocol.replace(":", "") || "https")
+    const proto = url.protocol.replace(":", "") || "https"
+    headers.set("x-forwarded-proto", proto === "http" ? "https" : proto)
   }
 
-  const patched = new NextRequest(url, {
+  const init: ConstructorParameters<typeof NextRequest>[1] = {
     method: req.method,
     headers,
-    body: req.body,
-    duplex: "half",
-  } as RequestInit & { duplex?: string })
+  }
 
-  return handler(patched)
+  // Solo reenviar body en POST/PUT/PATCH
+  if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
+    ;(init as { body?: BodyInit; duplex?: string }).body = req.body
+    ;(init as { duplex?: string }).duplex = "half"
+  }
+
+  return handler(new NextRequest(url, init))
 }
 
 export async function GET(req: NextRequest) {
