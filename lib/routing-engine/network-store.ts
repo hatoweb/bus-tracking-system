@@ -2,19 +2,15 @@ import { poolCID, cidConfigError } from '@/lib/db'
 import { sqlItinerarioVigenteEnFecha } from '@/lib/sql-itinerario-vigente'
 import { sqlJoinLineaVigente, sqlNumeroLinea } from '@/lib/sql-linea-ruta'
 import {
-  Footpath,
   ItineraryPattern,
   Stop,
   StopPassage,
   TransitNetwork,
 } from './types'
-import {
-  buildFootpaths,
-  SpatialStopIndex,
-} from './spatial-index'
+import { buildFootpaths, SpatialStopIndex } from './spatial-index'
 
-/** TTL de la red en memoria: 20 minutos */
-const NETWORK_TTL_MS = 20 * 60 * 1000
+/** TTL de la red en memoria: 60 minutos (evitar recargas que duplican RAM) */
+const NETWORK_TTL_MS = 60 * 60 * 1000
 
 let cachedNetwork: TransitNetwork | null = null
 let spatialIndexInstance: SpatialStopIndex | null = null
@@ -25,7 +21,8 @@ function stopLabel(alias: string): string {
 }
 
 /**
- * Carga la red completa de transporte desde PostgreSQL a la memoria RAM.
+ * Carga la red de transporte (solo itinerarios vigentes + paradas usadas).
+ * Evita traer toda geometria.paradas_oficiales a RAM.
  */
 async function loadNetworkFromDb(): Promise<TransitNetwork> {
   const cfg = cidConfigError()
@@ -35,38 +32,10 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
 
   const client = await poolCID.connect()
   try {
-    // 1) Cargar todas las paradas oficiales con coordenadas
-    const stopsSql = `
-      SELECT
-        id,
-        CAST(source_id AS text) AS source_id,
-        ${stopLabel('p')} AS name,
-        ST_Y(ST_Transform(geom, 4326)) AS lat,
-        ST_X(ST_Transform(geom, 4326)) AS lng,
-        bearing
-      FROM geometria.paradas_oficiales p
-      WHERE geom IS NOT NULL
-    `
-    const stopsRes = await client.query(stopsSql)
-    const stopsMap = new Map<number, Stop>()
+    await client.query(`SET LOCAL statement_timeout = '60000'`)
 
-    for (const row of stopsRes.rows) {
-      const lat = Number(row.lat)
-      const lng = Number(row.lng)
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        stopsMap.set(Number(row.id), {
-          id: Number(row.id),
-          source_id: row.source_id ? String(row.source_id) : null,
-          name: String(row.name || `Parada #${row.id}`),
-          lat,
-          lng,
-          bearing: row.bearing != null ? Number(row.bearing) : null,
-        })
-      }
-    }
-
-    // 2) Cargar itinerarios vigentes con sus datos comerciales
-    const itinsSql = `
+    // 1) Itinerarios vigentes
+    const itinsRes = await client.query(`
       SELECT
         h.id_itinerario,
         h.ruta_hex,
@@ -80,12 +49,13 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
       JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
       WHERE ${sqlItinerarioVigenteEnFecha('h')}
         AND e.permisionario = true
-    `
-    const itinsRes = await client.query(itinsSql)
-    const itinsMap = new Map<number, ItineraryPattern>()
+    `)
 
+    const itinsMap = new Map<number, ItineraryPattern>()
+    const itinIds: number[] = []
     for (const row of itinsRes.rows) {
       const idItin = Number(row.id_itinerario)
+      itinIds.push(idItin)
       itinsMap.set(idItin, {
         id_itinerario: idItin,
         ruta_hex: String(row.ruta_hex || ''),
@@ -98,26 +68,74 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
       })
     }
 
-    // 3) Cargar la secuencia de paradas de cada itinerario
-    const seqSql = `
-      SELECT
-        ip.id_itinerario,
-        ip.id_parada,
-        ip.orden
-      FROM geometria.itinerario_parada ip
-      JOIN geometria.historico_itinerario h
-        ON h.id_itinerario = ip.id_itinerario
-       AND ${sqlItinerarioVigenteEnFecha('h')}
-      ORDER BY ip.id_itinerario, ip.orden ASC
-    `
-    const seqRes = await client.query(seqSql)
-    const stopToItinsMap = new Map<number, StopPassage[]>()
+    if (itinIds.length === 0) {
+      const empty: TransitNetwork = {
+        version: (cachedNetwork?.version || 0) + 1,
+        loadedAt: Date.now(),
+        stops: new Map(),
+        itineraries: new Map(),
+        stopToItineraries: new Map(),
+        footpaths: new Map(),
+      }
+      cachedNetwork = empty
+      spatialIndexInstance = new SpatialStopIndex(0.005)
+      return empty
+    }
 
+    // 2) Secuencia de paradas solo de esos itinerarios
+    const seqRes = await client.query(
+      `
+      SELECT ip.id_itinerario, ip.id_parada, ip.orden
+      FROM geometria.itinerario_parada ip
+      WHERE ip.id_itinerario = ANY($1::int[])
+      ORDER BY ip.id_itinerario, ip.orden ASC
+      `,
+      [itinIds]
+    )
+
+    const usedStopIds = new Set<number>()
+    for (const row of seqRes.rows) {
+      usedStopIds.add(Number(row.id_parada))
+    }
+
+    // 3) Solo geometría de paradas usadas en itinerarios vigentes
+    const stopIdList = [...usedStopIds]
+    const stopsRes = await client.query(
+      `
+      SELECT
+        id,
+        CAST(source_id AS text) AS source_id,
+        ${stopLabel('p')} AS name,
+        ST_Y(ST_Transform(geom, 4326)) AS lat,
+        ST_X(ST_Transform(geom, 4326)) AS lng,
+        bearing
+      FROM geometria.paradas_oficiales p
+      WHERE p.id = ANY($1::int[])
+        AND p.geom IS NOT NULL
+      `,
+      [stopIdList]
+    )
+
+    const stopsMap = new Map<number, Stop>()
+    for (const row of stopsRes.rows) {
+      const lat = Number(row.lat)
+      const lng = Number(row.lng)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      stopsMap.set(Number(row.id), {
+        id: Number(row.id),
+        source_id: row.source_id ? String(row.source_id) : null,
+        name: String(row.name || `Parada #${row.id}`),
+        lat,
+        lng,
+        bearing: row.bearing != null ? Number(row.bearing) : null,
+      })
+    }
+
+    const stopToItinsMap = new Map<number, StopPassage[]>()
     for (const row of seqRes.rows) {
       const idItin = Number(row.id_itinerario)
       const idParada = Number(row.id_parada)
       const orden = Number(row.orden)
-
       const itin = itinsMap.get(idItin)
       if (!itin || !stopsMap.has(idParada)) continue
 
@@ -133,10 +151,10 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
       passages.push({ id_itinerario: idItin, stop_index: index })
     }
 
-    // 4) Construir índice espacial de paradas y footpaths
+    // 4) Índice espacial + footpaths (solo paradas de la malla vigente)
     const spatialIndex = new SpatialStopIndex(0.005)
     spatialIndex.build(stopsMap.values())
-    const footpaths = buildFootpaths(stopsMap, spatialIndex, 350)
+    const footpaths = buildFootpaths(stopsMap, spatialIndex, 300)
 
     const network: TransitNetwork = {
       version: (cachedNetwork?.version || 0) + 1,
@@ -147,12 +165,22 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
       footpaths,
     }
 
+    // Liberar referencia anterior antes de asignar
     cachedNetwork = network
     spatialIndexInstance = spatialIndex
 
+    if (typeof globalThis.gc === 'function') {
+      try {
+        globalThis.gc()
+      } catch {
+        /* ignore */
+      }
+    }
+
     console.log(
-      `[TransitNetwork] Red cargada en memoria: ${stopsMap.size} paradas, ` +
-        `${itinsMap.size} itinerarios vigentes, ${footpaths.size} paradas con transbordo peatonal.`
+      `[TransitNetwork] Red en memoria: ${stopsMap.size} paradas, ` +
+        `${itinsMap.size} itinerarios, ${footpaths.size} nodos con footpath. ` +
+        `heapUsed≈${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`
     )
 
     return network
@@ -161,9 +189,6 @@ async function loadNetworkFromDb(): Promise<TransitNetwork> {
   }
 }
 
-/**
- * Obtiene la red en memoria (o la inicializa si no existe o expiró).
- */
 export async function getTransitNetwork(forceRefresh = false): Promise<{
   network: TransitNetwork
   spatialIndex: SpatialStopIndex
