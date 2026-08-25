@@ -2,18 +2,15 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 
 /**
- * Auth.js + Google con next.config basePath=/prototipo_vmt
- *
- * Next.js quita el basePath del request interno → hay que:
- *  1) Declarar basePath: /prototipo_vmt/api/auth en Auth.js
- *  2) Reinyectar ese prefijo en app/api/auth/[...nextauth]/route.ts
- *
- * AUTH_* se leen en runtime (no capturar en build).
- * @see https://github.com/nextauthjs/next-auth/issues/13034
+ * Acceso dinámico a env (evita rarezas de bundling).
+ * AUTH_* deben existir en runtime del contenedor (.env / docker-compose).
  */
+function env(name: string): string {
+  return String(process.env[name] ?? "").trim()
+}
+
 function appBase(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || ""
+  const raw = env("NEXT_PUBLIC_BASE_PATH") || env("BASE_PATH")
   if (!raw || raw === "/") return ""
   return raw.endsWith("/") ? raw.slice(0, -1) : raw
 }
@@ -24,40 +21,45 @@ function authBasePath(): string {
 }
 
 export function authConfigStatus() {
-  const secret =
-    process.env.AUTH_SECRET?.trim() ||
-    process.env.NEXTAUTH_SECRET?.trim() ||
-    ""
-  const googleId =
-    process.env.AUTH_GOOGLE_ID?.trim() ||
-    process.env.GOOGLE_CLIENT_ID?.trim() ||
-    ""
-  const googleSecret =
-    process.env.AUTH_GOOGLE_SECRET?.trim() ||
-    process.env.GOOGLE_CLIENT_SECRET?.trim() ||
-    ""
+  const secret = env("AUTH_SECRET") || env("NEXTAUTH_SECRET")
+  const googleId = env("AUTH_GOOGLE_ID") || env("GOOGLE_CLIENT_ID")
+  const googleSecret = env("AUTH_GOOGLE_SECRET") || env("GOOGLE_CLIENT_SECRET")
   return {
     hasSecret: Boolean(secret),
     hasGoogleId: Boolean(googleId),
     hasGoogleSecret: Boolean(googleSecret),
-    authUrl:
-      process.env.AUTH_URL?.trim() ||
-      process.env.NEXTAUTH_URL?.trim() ||
-      null,
+    secretLength: secret.length,
+    authUrl: env("AUTH_URL") || env("NEXTAUTH_URL") || null,
     authBasePath: authBasePath(),
     appBase: appBase() || "/",
+    trustHost: env("AUTH_TRUST_HOST") || "true (config)",
   }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth(() => {
   const base = appBase()
   const authPath = authBasePath()
+  const secret = env("AUTH_SECRET") || env("NEXTAUTH_SECRET")
+  const googleId = env("AUTH_GOOGLE_ID") || env("GOOGLE_CLIENT_ID")
+  const googleSecret = env("AUTH_GOOGLE_SECRET") || env("GOOGLE_CLIENT_SECRET")
+
+  if (!secret) {
+    console.error("[auth] AUTH_SECRET ausente en runtime")
+  }
+  if (!googleId || !googleSecret) {
+    console.error("[auth] AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET ausentes en runtime")
+  }
 
   return {
     basePath: authPath,
     trustHost: true,
-    // Auth.js toma AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET del env
-    providers: [Google],
+    secret: secret || undefined,
+    providers: [
+      Google({
+        clientId: googleId,
+        clientSecret: googleSecret,
+      }),
+    ],
     pages: {
       signIn: base ? `${base}/login` : "/login",
       error: base ? `${base}/login` : "/login",
@@ -68,12 +70,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
     },
     callbacks: {
       async redirect({ url, baseUrl }) {
-        const authUrl = (
-          process.env.AUTH_URL ||
-          process.env.NEXTAUTH_URL ||
+        const authUrl = (env("AUTH_URL") || env("NEXTAUTH_URL")).replace(
+          /\/$/,
           ""
-        ).replace(/\/$/, "")
-
+        )
         const origin = (() => {
           try {
             return authUrl ? new URL(authUrl).origin : baseUrl
@@ -81,16 +81,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
             return baseUrl
           }
         })()
-
         const appRoot = authUrl || `${origin}${base}`
 
         if (url.startsWith(appRoot)) return url
-
         if (url.startsWith("/")) {
           if (base && url.startsWith(base)) return `${origin}${url}`
           return `${appRoot}${url === "/" ? "" : url}`
         }
-
         try {
           const u = new URL(url)
           if (u.origin === origin) {
@@ -102,7 +99,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
         } catch {
           /* ignore */
         }
-
         return appRoot || baseUrl
       },
       async jwt({ token, profile }) {
