@@ -1,16 +1,24 @@
 import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import type { NextAuthConfig } from "next-auth"
+import { getBasePath } from "@/lib/base-path"
 
 /**
  * Auth.js (next-auth v5) + Google / Gmail.
  *
- * En el .env del servidor (Docker) deben existir:
- *   AUTH_SECRET=...          (obligatorio)
+ * Con next.config basePath=/prototipo_vmt hay que declarar el mismo
+ * prefijo en Auth.js y reinyectarlo en la route (ver [...nextauth]/route.ts).
+ *
+ * .env:
+ *   AUTH_SECRET=...
+ *   AUTH_TRUST_HOST=true
  *   AUTH_URL=https://sistemas.mopc.gov.py/prototipo_vmt
  *   AUTH_GOOGLE_ID=...
  *   AUTH_GOOGLE_SECRET=...
  */
+const appBase = getBasePath()
+const authBasePath = appBase ? `${appBase}/api/auth` : "/api/auth"
+
 const googleId =
   process.env.AUTH_GOOGLE_ID?.trim() ||
   process.env.GOOGLE_CLIENT_ID?.trim() ||
@@ -25,10 +33,6 @@ const secret =
   process.env.NEXTAUTH_SECRET?.trim() ||
   ""
 
-const useSecureCookies =
-  (process.env.AUTH_URL || "").startsWith("https://") ||
-  process.env.NODE_ENV === "production"
-
 export function authConfigStatus() {
   return {
     hasSecret: Boolean(secret),
@@ -38,6 +42,7 @@ export function authConfigStatus() {
       process.env.AUTH_URL?.trim() ||
       process.env.NEXTAUTH_URL?.trim() ||
       null,
+    authBasePath,
   }
 }
 
@@ -69,6 +74,7 @@ if (!secret) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  basePath: authBasePath,
   secret: secret || undefined,
   trustHost: true,
   providers,
@@ -80,17 +86,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  // Cookie en path / para que sirva a /prototipo_vmt/api/* y no solo a /api/auth
   cookies: {
     sessionToken: {
-      name: useSecureCookies
-        ? "__Secure-authjs.session-token"
-        : "authjs.session-token",
+      name:
+        process.env.NODE_ENV === "production"
+          ? "__Secure-authjs.session-token"
+          : "authjs.session-token",
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: useSecureCookies,
+        secure: process.env.NODE_ENV === "production",
       },
     },
   },
