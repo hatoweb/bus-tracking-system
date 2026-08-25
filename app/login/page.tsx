@@ -37,7 +37,7 @@ function LoginInner() {
             <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
               No se pudo iniciar sesión
               {error === "Configuration"
-                ? ": faltan credenciales de Google en el servidor (AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET)."
+                ? ": el servidor no tiene AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET en el .env. Revisá /prototipo_vmt/api/health → auth."
                 : error === "AccessDenied"
                   ? ": acceso denegado."
                   : `. (${error})`}
