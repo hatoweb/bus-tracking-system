@@ -250,9 +250,7 @@ function PlaceSearchField({
           className={`flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 ${ringClass} border`}
         >
           {variant === "origin" ? (
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-sky-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-            </span>
+            <MapPinned className="h-4 w-4 shrink-0 text-sky-500" />
           ) : (
             <MapPinned className="h-4 w-4 shrink-0 text-emerald-700" />
           )}
@@ -377,6 +375,24 @@ export function TripPlanner({
   }, [])
 
   const lastDraftKeyRef = useRef<string>("")
+
+  // Al descolapsar: pre-poblar origen con GPS (si disponible) y enfocar destino
+  useEffect(() => {
+    if (!expanded) return
+    if (!origin && userLocation) {
+      setOrigin({
+        id: "gps:live",
+        label: "Mi ubicación actual",
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+        tipo: "gps",
+        fuente: "geolocation",
+      })
+    }
+    setFocusField("destination")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
   useEffect(() => {
     const key = `${origin?.id ?? ""}:${origin?.lat ?? ""}:${origin?.lng ?? ""}|${destination?.id ?? ""}:${destination?.lat ?? ""}:${destination?.lng ?? ""}`
     if (key === lastDraftKeyRef.current) return
