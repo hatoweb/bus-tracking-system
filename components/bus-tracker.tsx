@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Bus as BusIcon,
   CalendarClock,
+  Crosshair,
   MapPin,
   MessageSquare,
-  Radio,
   Route,
   Satellite,
+  Settings2,
   Volume2,
   VolumeX,
   Bell,
@@ -216,6 +217,8 @@ export function BusTracker() {
   const [tripOptions, setTripOptions] = useState<TripPlanResult[]>([])
   const [tripOptionsOpen, setTripOptionsOpen] = useState(true)
   const [busesSectionOpen, setBusesSectionOpen] = useState(true)
+  const [tripDetailOpen, setTripDetailOpen] = useState(false)
+  const [nearbySettingsOpen, setNearbySettingsOpen] = useState(false)
   const [destNearbyStops, setDestNearbyStops] = useState<NearbyStop[]>([])
   const [tripGuidance, setTripGuidance] = useState<{
     mode: "walk_to_stop" | "to_destination"
@@ -2022,10 +2025,6 @@ export function BusTracker() {
               </span>
               <div>
                 <h1 className="text-sm font-bold leading-tight text-card-foreground">GeoBus</h1>
-                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Radio className="h-3 w-3 text-status-moving" aria-hidden="true" />
-                  {activeMovingCount}/{totalCount} activos {useRealData ? "(BD Real)" : ""} · {clock}
-                </p>
               </div>
             </div>
 
@@ -2264,28 +2263,30 @@ export function BusTracker() {
                   </button>
                 )}
 
-                <div className="absolute bottom-2 left-2 z-[400] flex flex-col gap-1 rounded-md bg-background/85 p-1.5 text-[10px] pointer-events-none shadow-sm">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-status-moving" aria-hidden="true" />
-                    <span className="font-medium text-foreground">En movimiento</span>
+                {tripDestination && (
+                  <div className="absolute bottom-2 left-2 z-[400] flex flex-col gap-1 rounded-md bg-background/85 p-1.5 text-[10px] pointer-events-none shadow-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-status-moving" aria-hidden="true" />
+                      <span className="font-medium text-foreground">En movimiento</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Parada recomendada</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-teal-700" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Parada elegida</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-rose-600" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Bajada (destino)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-1 w-4 rounded-sm bg-blue-600" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Itinerario al destino</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500" aria-hidden="true" />
-                    <span className="font-medium text-foreground">Parada recomendada</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-teal-700" aria-hidden="true" />
-                    <span className="font-medium text-foreground">Parada elegida</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-600" aria-hidden="true" />
-                    <span className="font-medium text-foreground">Bajada (destino)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-1 w-4 rounded-sm bg-blue-600" aria-hidden="true" />
-                    <span className="font-medium text-foreground">Itinerario al destino</span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Trip Guidance (alerta / parada recomendada) */}
@@ -2328,6 +2329,11 @@ export function BusTracker() {
                         Ruta trazada hacia tu destino. Abajo están las empresas que pasan por esta parada.
                       </p>
                     </>
+                  )}
+                  {tripSummary && (
+                    <p className="mt-2 border-t border-current/20 pt-2 text-[11px] opacity-95">
+                      {tripSummary}
+                    </p>
                   )}
                 </div>
               )}
@@ -2560,96 +2566,141 @@ export function BusTracker() {
                 </div>
               )}
 
-              {tripSummary && (
-                <p className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-[11px] text-foreground">
-                  {tripSummary}
-                </p>
-              )}
-
-              {tripSuggestions.length > 0 && (
-                <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-                  <h3 className="mb-2 text-sm font-semibold text-foreground">
-                    {tripGuidance?.mode === "to_destination"
-                      ? "Empresas que pasan por tu parada y llegan al destino"
-                      : "Empresas que pasan por esas paradas y llegan cerca del destino"}
-                  </h3>
-                  <ul className="flex flex-col gap-1.5">
-                    {tripSuggestions.map((s: any) => (
-                      <li key={s.cod_catalogo}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCodCatalogo(String(s.cod_catalogo))
-                            speak(`Empresa ${s.eot_nombre} seleccionada`, { force: true })
-                          }}
-                          className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-left text-xs hover:bg-muted"
-                        >
-                          <span className="min-w-0">
-                            <span className="font-semibold text-foreground">{s.eot_nombre}</span>
-                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                              Líneas: {(s.lineas || []).slice(0, 5).join(", ") || s.eot_linea || "—"}
-                              {s.parada_ids_origen?.length
-                                ? ` · Abordaje en ${s.parada_ids_origen.length} parada(s)`
-                                : ""}
-                            </span>
-                          </span>
-                          <span
-                            className={`ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                              s.cubre_destino
-                                ? "bg-emerald-500/20 text-emerald-800"
-                                : "bg-amber-500/20 text-amber-800"
-                            }`}
-                          >
-                            {s.cubre_destino ? "Llega al destino" : "Solo origen"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {destNearbyStops.length > 0 && (
-                <div className="rounded-xl border border-rose-500/40 bg-rose-500/5 p-3 shadow-sm">
-                  <h3 className="mb-1 text-sm font-semibold text-foreground">
-                    Paradas de bajada · {tripDestination?.label || "destino"}
-                  </h3>
-                  <p className="mb-2 text-[11px] text-muted-foreground">
-                    Marcadas en rojo (BAJADA). Sus líneas/empresas se usan para
-                    filtrar las paradas de abordaje cerca de tu ubicación.
-                  </p>
-                  <ul className="flex flex-col gap-1.5">
-                    {destNearbyStops.map((stop, idx) => (
-                      <li
-                        key={`dest-${stop.id}-${idx}`}
-                        className={`flex items-center justify-between rounded-lg border px-2.5 py-2 text-xs ${
-                          stop.isAlightingRecommended
-                            ? "border-rose-500/50 bg-rose-500/10"
-                            : "border-border/70 bg-muted/40"
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">
-                            {stop.rank || idx + 1}
-                          </span>
-                          <span className="font-medium text-foreground">{stop.source_name}</span>
-                          {stop.isAlightingRecommended && (
-                            <span className="ml-1 text-[10px] font-bold text-rose-800">
-                              · Bajá aquí
-                            </span>
-                          )}
-                          {stop.lineasEmpresa && stop.lineasEmpresa.length > 0 && (
-                            <span className="mt-0.5 block text-[10px] text-rose-800/90">
-                              L{stop.lineasEmpresa.slice(0, 6).join(", L")}
-                            </span>
-                          )}
+              {(tripSuggestions.length > 0 || destNearbyStops.length > 0) && (
+                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setTripDetailOpen((v) => !v)}
+                    aria-expanded={tripDetailOpen}
+                    className="flex w-full items-center justify-between gap-2 p-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                        <h3 className="text-sm font-semibold text-foreground">
+                          Detalle del viaje
+                        </h3>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {[
+                            tripSuggestions.length > 0
+                              ? `${tripSuggestions.length} empresas`
+                              : null,
+                            destNearbyStops.length > 0
+                              ? `${destNearbyStops.length} paradas bajada`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
-                        <span className="shrink-0 font-semibold text-rose-700">
-                          {Math.round(stop.distancia_m)} m
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        {tripDetailOpen
+                          ? "Empresas vinculadas y paradas de bajada"
+                          : "Tocá para ver empresas sugeridas y paradas de bajada"}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                        tripDetailOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                      tripDetailOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="flex flex-col gap-3 border-t border-border/70 p-3 pt-2">
+                        {tripSuggestions.length > 0 && (
+                          <div>
+                            <h4 className="mb-1.5 text-xs font-semibold text-foreground">
+                              {tripGuidance?.mode === "to_destination"
+                                ? "Empresas que pasan por tu parada y llegan al destino"
+                                : "Empresas que pasan por esas paradas y llegan cerca del destino"}
+                            </h4>
+                            <ul className="flex flex-col gap-1.5">
+                              {tripSuggestions.map((s: any) => (
+                                <li key={s.cod_catalogo}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCodCatalogo(String(s.cod_catalogo))
+                                      speak(`Empresa ${s.eot_nombre} seleccionada`, { force: true })
+                                    }}
+                                    className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-left text-xs hover:bg-muted"
+                                  >
+                                    <span className="min-w-0">
+                                      <span className="font-semibold text-foreground">{s.eot_nombre}</span>
+                                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                        Líneas: {(s.lineas || []).slice(0, 5).join(", ") || s.eot_linea || "—"}
+                                        {s.parada_ids_origen?.length
+                                          ? ` · Abordaje en ${s.parada_ids_origen.length} parada(s)`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                    <span
+                                      className={`ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                        s.cubre_destino
+                                          ? "bg-emerald-500/20 text-emerald-800"
+                                          : "bg-amber-500/20 text-amber-800"
+                                      }`}
+                                    >
+                                      {s.cubre_destino ? "Llega al destino" : "Solo origen"}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {destNearbyStops.length > 0 && (
+                          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-2.5">
+                            <h4 className="mb-0.5 text-xs font-semibold text-foreground">
+                              Paradas de bajada · {tripDestination?.label || "destino"}
+                            </h4>
+                            <p className="mb-2 text-[10px] text-muted-foreground">
+                              Marcadas en rojo (BAJADA). Sus líneas/empresas se usan para filtrar las paradas de abordaje.
+                            </p>
+                            <ul className="flex flex-col gap-1.5">
+                              {destNearbyStops.map((stop, idx) => (
+                                <li
+                                  key={`dest-${stop.id}-${idx}`}
+                                  className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs ${
+                                    stop.isAlightingRecommended
+                                      ? "border-rose-500/50 bg-rose-500/10"
+                                      : "border-border/70 bg-muted/40"
+                                  }`}
+                                >
+                                  <span className="min-w-0">
+                                    <span className="mr-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-[9px] font-bold text-white">
+                                      {stop.rank || idx + 1}
+                                    </span>
+                                    <span className="font-medium text-foreground">{stop.source_name}</span>
+                                    {stop.isAlightingRecommended && (
+                                      <span className="ml-1 text-[9px] font-bold text-rose-800">
+                                        · Bajá aquí
+                                      </span>
+                                    )}
+                                    {stop.lineasEmpresa && stop.lineasEmpresa.length > 0 && (
+                                      <span className="mt-0.5 block text-[9px] text-rose-800/90">
+                                        L{stop.lineasEmpresa.slice(0, 6).join(", L")}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="shrink-0 font-semibold text-rose-700 text-[11px]">
+                                    {Math.round(stop.distancia_m)} m
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2756,86 +2807,6 @@ export function BusTracker() {
                 <span className="text-sm font-medium">Espacio publicitario</span>
               </div>
 
-              {/* Selector de modo / empresa */}
-              <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-2.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">
-                    Modo: {useRealData ? "🟢 BD Real (PostgreSQL)" : "🔵 Simulación"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setUseRealData(!useRealData)}
-                    className="rounded bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-                  >
-                    Cambiar a {useRealData ? "Simulador" : "BD Real"}
-                  </button>
-                </div>
-
-                {useRealData && (
-                  <select
-                    value={selectedCodCatalogo}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setSelectedCodCatalogo(val)
-                      setSelectedBusId(null)
-                      setEmpresaPasaPorCercanas(null)
-                      setMatchingItinerarioIds([])
-                      const emp = empresas.find((item) => String(item.cod_catalogo) === val)
-                      if (emp) {
-                        speak(`Empresa ${emp.eot_nombre} seleccionada, Línea: ${emp.eot_linea}`, { force: true })
-                      } else {
-                        speak("Por favor, selecciona una empresa", { force: true })
-                      }
-                    }}
-                    className="w-full rounded border border-input bg-background p-1.5 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">-- Seleccionar empresa --</option>
-                    {empresas.map((emp) => (
-                      <option key={emp.eot_id} value={emp.cod_catalogo}>
-                        {emp.eot_nombre} (Líneas: {emp.eot_linea})
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {useRealData && selectedCodCatalogo && (
-                  <div className="mt-1">
-                    {nearbyStops.length === 0 ? (
-                      <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-800">
-                        Iniciá el GPS o buscá un viaje para verificar paradas cercanas.
-                      </p>
-                    ) : empresaCercanasChecking ? (
-                      <p className="text-[11px] text-muted-foreground">
-                        Verificando si la empresa pasa por paradas cercanas…
-                      </p>
-                    ) : empresaPasaPorCercanas === false ? (
-                      <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          <strong>
-                            {empresas.find((e) => String(e.cod_catalogo) === selectedCodCatalogo)?.eot_nombre ||
-                              "Esta empresa"}
-                          </strong>{" "}
-                          no pasa por ninguna de las paradas oficiales cercanas a tu ubicación.
-                          Probá otra empresa o ampliá el radio.
-                        </span>
-                      </div>
-                    ) : empresaPasaPorCercanas === true ? (
-                      <div className="flex items-start gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-2 text-[11px] text-emerald-800">
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          La empresa pasa por{" "}
-                          <strong>
-                            {nearbyStops.filter((s) => s.servedByEmpresa).length}
-                          </strong>{" "}
-                          parada(s) cercana(s).
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
               {/* Paradas cercanas (geo-itinerarios) */}
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -2847,57 +2818,25 @@ export function BusTracker() {
                         : `Abordaje cerca tuyo → ${tripDestination.label}`
                       : "Paradas cerca de mí"}
                   </h2>
-                  <span className="text-[10px] text-muted-foreground">
-                    {boardingRouteLoading
-                      ? "Actualizando recomendación…"
-                      : tripDestination
-                        ? showMoreStops
-                          ? "Correctas + otras cercanas"
-                          : "Solo paradas correctas (hasta 5)"
-                        : isTrackingLocation
-                          ? "GPS en vivo · tocá una parada"
-                          : "Tocá una parada para elegir"}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNearbySettingsOpen((v) => !v)}
+                      title="Ajustes de búsqueda de paradas"
+                      aria-label="Ajustes de búsqueda de paradas"
+                      className={`rounded-md p-1 transition-colors ${
+                        nearbySettingsOpen
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <label className="flex flex-col gap-1 text-[10px] font-medium text-muted-foreground">
-                    Radio
-                    <select
-                      value={nearbyRadioM}
-                      onChange={(e) => setNearbyRadioM(Number(e.target.value))}
-                      className="rounded-lg border border-input bg-background px-2 py-1.5 text-xs text-foreground"
-                    >
-                      <option value={300}>300 m</option>
-                      <option value={800}>800 m</option>
-                      <option value={1200}>1200 m</option>
-                      <option value={2000}>2000 m</option>
-                      <option value={3000}>3000 m</option>
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1 text-[10px] font-medium text-muted-foreground">
-                    Top
-                    <select
-                      value={nearbyLimit}
-                      onChange={(e) => setNearbyLimit(Number(e.target.value))}
-                      className="rounded-lg border border-input bg-background px-2 py-1.5 text-xs text-foreground"
-                    >
-                      <option value={1}>Top 1</option>
-                      <option value={3}>Top 3</option>
-                      <option value={5}>Top 5</option>
-                      <option value={8}>Top 8</option>
-                      <option value={12}>Top 12</option>
-                    </select>
-                  </label>
-                  <label className="flex items-end gap-1.5 pb-1.5 text-[11px] text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={autoCenterNearby}
-                      onChange={(e) => setAutoCenterNearby(e.target.checked)}
-                      className="rounded border-input"
-                    />
-                    Auto-centrar
-                  </label>
+                {/* Botón GPS prominente */}
+                <div className="mb-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -2908,11 +2847,45 @@ export function BusTracker() {
                         handleShareLocation()
                       }
                     }}
-                    className="rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-foreground hover:opacity-90"
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold transition-all shadow-sm ${
+                      isTrackingLocation
+                        ? "bg-rose-500/15 text-rose-700 border border-rose-500/30 hover:bg-rose-500/25"
+                        : "bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.99]"
+                    }`}
                   >
-                    {isTrackingLocation ? "Detener GPS" : "Iniciar GPS"}
+                    <Crosshair className={`h-4 w-4 ${isTrackingLocation ? "animate-spin" : ""}`} />
+                    <span>{isTrackingLocation ? "Detener seguimiento GPS" : "Iniciar GPS / Mi ubicación"}</span>
                   </button>
                 </div>
+
+                {/* Panel colapsable de ajustes secundarios (Radio y Auto-centrar) */}
+                {nearbySettingsOpen && (
+                  <div className="mb-2.5 flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/40 p-2.5 text-xs">
+                    <label className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                      <span>Radio:</span>
+                      <select
+                        value={nearbyRadioM}
+                        onChange={(e) => setNearbyRadioM(Number(e.target.value))}
+                        className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+                      >
+                        <option value={300}>300 m</option>
+                        <option value={800}>800 m</option>
+                        <option value={1200}>1200 m</option>
+                        <option value={2000}>2000 m</option>
+                        <option value={3000}>3000 m</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[11px] text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoCenterNearby}
+                        onChange={(e) => setAutoCenterNearby(e.target.checked)}
+                        className="rounded border-input"
+                      />
+                      <span>Auto-centrar mapa</span>
+                    </label>
+                  </div>
+                )}
 
                 {tripDestination && (
                   <label className="mb-2 flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-[11px] text-foreground">
