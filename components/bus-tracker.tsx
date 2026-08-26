@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ChevronDown,
   X,
+  Compass,
 } from "lucide-react"
 import {
   type Bus,
@@ -29,6 +30,8 @@ import {
   nearestStopInfo,
 } from "@/lib/transit-data"
 import { useVoiceAnnouncer } from "@/hooks/use-voice-announcer"
+import { useProximityAlerts } from "@/hooks/use-proximity-alerts"
+import { StorageService } from "@/lib/storage-service"
 import { RouteMap } from "@/components/route-map"
 import { BusList } from "@/components/bus-list"
 import { RealBusList, getRealBusStatusKey, prepareClosestLineBuses, type RealBusWithDistance } from "@/components/real-bus-list"
@@ -297,15 +300,12 @@ export function BusTracker() {
   const tripAlightingIdsRef = useRef<Set<number>>(new Set())
   const selectedBoardingStopIdRef = useRef<number | null>(null)
 
-  // Sincronizar perfil local con sesión Google (Auth.js)
+  // Sincronizar perfil local con sesión Google (Auth.js) u operar en Modo Invitado
   useEffect(() => {
     if (sessionStatus === "loading") return
     if (sessionStatus === "unauthenticated") {
-      setUser(null)
-      const login = apiUrl("/login")
-      if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
-        window.location.href = login
-      }
+      // Modo invitado: no redirigir, mantener acceso libre
+      setUser((prev) => (prev?.email?.includes("@") && !prev?.email?.endsWith(".local") ? null : prev))
       return
     }
     if (session?.user?.email) {
@@ -416,6 +416,19 @@ export function BusTracker() {
   ])
 
   const { enabled: voiceEnabled, supported: voiceSupported, speak, toggle } = useVoiceAnnouncer()
+  const { evaluateProximity, formatDualTelemetry } = useProximityAlerts({ speak, voiceEnabled })
+  const [locatingWhereAmI, setLocatingWhereAmI] = useState(false)
+
+  // Cargar configuraciones de accesibilidad persistidas (Modo Invitado)
+  useEffect(() => {
+    const saved = StorageService.getSettings()
+    if (saved.needsAccessibility) {
+      setNeedsAccessibility(true)
+    }
+    if (saved.adaptiveRadiusM && saved.adaptiveRadiusM !== 1200) {
+      setNearbyRadioM(saved.adaptiveRadiusM)
+    }
+  }, [])
 
   const lastStatusRef = useRef<Record<string, BusStatus>>({})
 
@@ -1758,6 +1771,31 @@ export function BusTracker() {
     [applyUserLocation, fetchNearbyStopsDebounced, speak, stopLocationWatch, showToast]
   )
 
+  const handleWhereAmI = useCallback(async () => {
+    if (!user?.lat || !user?.lng) {
+      speak("Para saber dónde te encuentras, activá primero tu GPS.", { force: true })
+      handleShareLocation(true)
+      return
+    }
+
+    setLocatingWhereAmI(true)
+    speak("Consultando tu ubicación y referencias...", { force: true })
+    try {
+      const res = await fetch(apiUrl(`/api/geocode/reverse?lat=${user.lat}&lng=${user.lng}`))
+      const json = await res.json()
+      if (json.success && json.data?.frase) {
+        speak(json.data.frase, { force: true })
+        showToast(json.data.frase, "info")
+      } else {
+        speak("No pudimos obtener el nombre de la calle en este punto.", { force: true })
+      }
+    } catch {
+      speak("Error de conexión al consultar las referencias de tu ubicación.", { force: true })
+    } finally {
+      setLocatingWhereAmI(false)
+    }
+  }, [user?.lat, user?.lng, speak, handleShareLocation, showToast])
+
   // Reconsultar cercanas si cambian radio/top N y ya hay ubicación
   useEffect(() => {
     if (user?.locationShared && user.lat != null && user.lng != null) {
@@ -1898,22 +1936,20 @@ export function BusTracker() {
           setProximityStatus("normal")
         }
 
-        // Alertar solo si el bus aún sirve para abordar
-        if (
-          !focus.passedBoardingStop &&
-          meters <= 1000 &&
-          approachAlertRef.current !== `${focus.mean_id}:in`
-        ) {
-          approachAlertRef.current = `${focus.mean_id}:in`
-          speak(
-            meters <= 400
-              ? `${voiceLabel} llegando, a ${meters} metros.`
-              : `${voiceLabel} acercándose, a ${meters} metros.`,
-            { force: true }
-          )
-        } else if (focus.passedBoardingStop) {
+        // Evaluar alertas hápticas y telemetría dual por hitos (500m, 200m, 50m "Levantar la mano")
+        if (!focus.passedBoardingStop && meters > 0) {
+          evaluateProximity({
+            id: focus.mean_id,
+            lineaLabel: voiceLabel,
+            distanceMeters: meters,
+            etaMinutes: focus.eta_minutos ?? (meters && avgBusSpeedKmh ? estimateEtaMinutes(meters, avgBusSpeedKmh) : null),
+            speedKmh: focus.velocidad,
+          })
+        }
+
+        if (focus.passedBoardingStop) {
           approachAlertRef.current = `${focus.mean_id}:passed`
-        } else if (meters > 1000) {
+        } else if (meters > 1200) {
           approachAlertRef.current = `${focus.mean_id}:out`
         }
       }
@@ -2032,11 +2068,16 @@ export function BusTracker() {
           const lineStr = lineDescSelect && empNombreSelect
             ? `${lineDescSelect}, del ${empNombreSelect}`
             : lineDescSelect || empNombreSelect
-          const speedStr = realBus.velocidad > 0 ? `${Math.round(realBus.velocidad)} kilómetros por hora` : "detenido"
-          const message = lineStr
-            ? `Seleccionado: ${lineStr}. Estado: ${statusLabel}, velocidad ${speedStr}.`
-            : `Seleccionado bus número ${realBus.mean_id}. Estado: ${statusLabel}, velocidad ${speedStr}.`
-          speak(message, { force: true })
+
+          const dualTele = formatDualTelemetry({
+            id: realBus.mean_id,
+            lineaLabel: lineStr || `Bus #${realBus.mean_id}`,
+            distanceMeters: realBus.distanceMeters,
+            etaMinutes: realBus.eta_minutos,
+            speedKmh: realBus.velocidad,
+          })
+
+          speak(`Seleccionado: ${dualTele} Estado: ${statusLabel}.`, { force: true })
           return
         }
       }
@@ -2111,13 +2152,41 @@ export function BusTracker() {
                 </span>
               </button>
 
-              {/* Control de accesibilidad: emisión de sonidos por voz */}
+              {/* Botón de exploración y orientación contextual (Estilo Lazarillo) */}
               <button
                 type="button"
-                onClick={toggle}
+                onClick={handleWhereAmI}
+                disabled={locatingWhereAmI}
+                aria-label="¿Dónde estoy? Escuchar mi ubicación actual y paradas de referencia"
+                className="flex h-9 items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 text-xs font-bold text-sky-800 transition-colors hover:bg-sky-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                title="Leer en voz alta la calle, cruce y parada cercana más próxima"
+              >
+                <Compass className={`h-4 w-4 text-sky-600 ${locatingWhereAmI ? "animate-spin" : ""}`} aria-hidden="true" />
+                <span className="hidden sm:inline">¿Dónde estoy?</span>
+              </button>
+
+              {/* Control de accesibilidad: emisión de sonidos por voz con Radio Adaptativo (2.000m) */}
+              <button
+                type="button"
+                onClick={() => {
+                  toggle()
+                  const nextState = !voiceEnabled
+                  if (nextState) {
+                    setNearbyRadioM(2000)
+                    StorageService.saveSettings({ voiceEnabled: true, adaptiveRadiusM: 2000 })
+                    showToast("Accesibilidad activada: Radio perimetral expandido a 2.000 metros.", "info")
+                    if (user?.lat && user?.lng) {
+                      fetchNearbyStopsDebounced(user.lat, user.lng, true)
+                    }
+                  } else {
+                    setNearbyRadioM(1200)
+                    StorageService.saveSettings({ voiceEnabled: false, adaptiveRadiusM: 1200 })
+                    showToast("Anuncios por voz desactivados.", "info")
+                  }
+                }}
                 disabled={!voiceSupported}
                 aria-pressed={voiceEnabled}
-                aria-label={voiceEnabled ? "Desactivar anuncios por voz" : "Activar anuncios por voz"}
+                aria-label={voiceEnabled ? "Desactivar anuncios por voz y restaurar radio" : "Activar anuncios por voz y expandir radio a 2.000 metros"}
                 className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
                   voiceEnabled
                     ? "border-primary bg-primary text-primary-foreground"
@@ -2125,7 +2194,7 @@ export function BusTracker() {
                 }`}
                 title={
                   voiceSupported
-                    ? "Anuncios por voz para personas con discapacidad visual"
+                    ? "Anuncios por voz y radio perimetral de 2.000m para personas con discapacidad visual"
                     : "Tu navegador no admite anuncios por voz"
                 }
               >
@@ -2142,6 +2211,7 @@ export function BusTracker() {
                 onClick={() => {
                   const next = !needsAccessibility
                   setNeedsAccessibility(next)
+                  StorageService.saveSettings({ needsAccessibility: next })
                   speak(
                     next
                       ? "Priorizando colectivos con rampa"
@@ -2335,7 +2405,54 @@ export function BusTracker() {
         {/* Contenido */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {activeTab === "gps" && (
-            <div className="flex flex-col gap-3 p-3">
+            <div className="flex flex-col gap-2.5 p-3">
+              {/* Selector Directo de Línea y Empresa (sin forzar origen ni destino) */}
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-xs">
+                <BusIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <label htmlFor="quick-line-select" className="sr-only">
+                  Ver Línea o Empresa directa en el mapa
+                </label>
+                <select
+                  id="quick-line-select"
+                  value={selectedCodCatalogo}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setSelectedCodCatalogo(val)
+                    const emp = empresas.find((item) => String(item.cod_catalogo) === val)
+                    if (emp) {
+                      const msg = `Línea ${emp.eot_linea || emp.eot_nombre} seleccionada. Mostrando unidades en vivo.`
+                      speak(msg, { force: true })
+                      showToast(msg, "info")
+                    } else {
+                      speak("Mostrando todas las líneas del sistema.", { force: true })
+                    }
+                  }}
+                  aria-label="Seleccionar directamente una línea o empresa para ver en el mapa"
+                  className="min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">-- Ver todas las líneas o filtrar directa --</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.eot_id} value={emp.cod_catalogo}>
+                      Línea {emp.eot_linea || "S/N"} · {emp.eot_nombre}
+                    </option>
+                  ))}
+                </select>
+                {selectedCodCatalogo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCodCatalogo("")
+                      speak("Filtro de línea borrado.", { force: true })
+                    }}
+                    aria-label="Quitar filtro de línea"
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Quitar filtro de línea"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+
               {/* ¿A dónde vas? — desplegable */}
               <TripPlanner
                 empresas={empresas}
@@ -3244,6 +3361,23 @@ export function BusTracker() {
               <FeedbackPanel 
                 userEmail={user?.email}
                 userName={user?.name}
+                currentBusInfo={
+                  selectedBusId
+                    ? (() => {
+                        const rb = realBuses.find((x) => x.mean_id === selectedBusId || x.id === selectedBusId)
+                        return rb
+                          ? {
+                              meanId: rb.mean_id,
+                              lineaLabel: (rb as any).linea_label || rb.route_id,
+                              empresa: (rb as any).eot_nombre,
+                            }
+                          : null
+                      })()
+                    : null
+                }
+                userLocation={user?.lat && user?.lng ? { lat: user.lat, lng: user.lng } : null}
+                nearestStopName={nearbyStops[0]?.source_name || null}
+                onAnnounce={(msg) => speak(msg, { force: true })}
               />
             </div>
           )}
@@ -3344,7 +3478,27 @@ export function BusTracker() {
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <FeedbackPanel userEmail={user?.email} userName={user?.name} />
+              <FeedbackPanel 
+                userEmail={user?.email} 
+                userName={user?.name}
+                currentBusInfo={
+                  selectedBusId
+                    ? (() => {
+                        const rb = realBuses.find((x) => x.mean_id === selectedBusId || x.id === selectedBusId)
+                        return rb
+                          ? {
+                              meanId: rb.mean_id,
+                              lineaLabel: (rb as any).linea_label || rb.route_id,
+                              empresa: (rb as any).eot_nombre,
+                            }
+                          : null
+                      })()
+                    : null
+                }
+                userLocation={user?.lat && user?.lng ? { lat: user.lat, lng: user.lng } : null}
+                nearestStopName={nearbyStops[0]?.source_name || null}
+                onAnnounce={(msg) => speak(msg, { force: true })}
+              />
             </div>
           </div>
         </div>

@@ -28,8 +28,7 @@ function LoginInner() {
           <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-900">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p>
-              Para usar el sistema necesitás iniciar sesión con tu cuenta de{" "}
-              <strong>Gmail / Google</strong>.
+              Iniciá sesión con <strong>Google</strong> para sincronizar tus favoritos en la nube, o continuá directamente como invitado.
             </p>
           </div>
 
@@ -55,9 +54,24 @@ function LoginInner() {
             Continuar con Google
           </button>
 
+          <div className="relative my-2 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <span className="relative bg-white px-3 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              o bien
+            </span>
+          </div>
+
+          <a
+            href={callbackUrl}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-50/50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          >
+            Continuar como invitado (Sin registro)
+          </a>
+
           <p className="text-center text-[11px] text-slate-500">
-            Al continuar aceptás el uso de tu nombre y correo para identificar tu
-            sesión en GeoBus.
+            En modo invitado tus preferencias y paradas favoritas se guardan únicamente en la memoria de este dispositivo.
           </p>
         </div>
       </div>

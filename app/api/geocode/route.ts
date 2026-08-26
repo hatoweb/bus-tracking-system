@@ -61,12 +61,19 @@ export async function GET(request: NextRequest) {
     }
 
     const qNorm = stripAccents(q)
+    const normalizedIntersections = q
+      .replace(/\s+(?:esquina|esq\.?|con)\s+/gi, ' & ')
+      .replace(/\s+y\s+/gi, ' & ')
+      .trim()
+
+    const targetQuery = normalizedIntersections.length > 0 ? normalizedIntersections : q
+
     const scopedQuery =
       qNorm.includes('asuncion') ||
       qNorm.includes('paraguay') ||
       AMA_CENTRAL_DISTRITOS.some((d) => qNorm.includes(d))
-        ? q
-        : `${q}, Asunción`
+        ? targetQuery
+        : `${targetQuery}, Asunción`
 
     const url = new URL('https://nominatim.openstreetmap.org/search')
     url.searchParams.set('q', scopedQuery)
@@ -80,10 +87,15 @@ export async function GET(request: NextRequest) {
     let upstream = await fetchNominatim(url.toString())
     let data = upstream.data
 
-    // Fallback: sin bounded
+    // Fallback: sin bounded o con query original si la normalización no arrojó resultados
     if (upstream.ok && (!Array.isArray(data) || data.length === 0)) {
+      const fallbackQuery =
+        targetQuery !== q
+          ? (qNorm.includes('asuncion') ? q : `${q}, Asunción`)
+          : scopedQuery
+
       const url2 = new URL('https://nominatim.openstreetmap.org/search')
-      url2.searchParams.set('q', scopedQuery)
+      url2.searchParams.set('q', fallbackQuery)
       url2.searchParams.set('format', 'json')
       url2.searchParams.set('addressdetails', '1')
       url2.searchParams.set('limit', String(Math.min(limit * 3, 20)))

@@ -250,6 +250,7 @@ function PlaceSearchField({
     }
   }
 
+  const listId = `hits-list-${variant}`
   const isActive = Boolean(active || focused || mapPickActive)
   const ringClass = isActive
     ? variant === "destination"
@@ -261,6 +262,20 @@ function PlaceSearchField({
     <div ref={wrapRef} className="relative">
       {valueLabel ? (
         <div
+          role="button"
+          tabIndex={0}
+          aria-label={`${variant === "origin" ? "Origen seleccionado" : "Destino seleccionado"}: ${valueLabel}. Presione enter o toque para editar.`}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              setQuery(valueLabel)
+              onClear()
+              setTimeout(() => {
+                inputRef.current?.focus()
+                inputRef.current?.select()
+              }, 50)
+            }
+          }}
           onClick={() => {
             setQuery(valueLabel)
             onClear()
@@ -273,9 +288,9 @@ function PlaceSearchField({
           className={`flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 ${ringClass} border cursor-pointer hover:bg-muted/80`}
         >
           {variant === "origin" ? (
-            <MapPinned className="h-4 w-4 shrink-0 text-sky-500" />
+            <MapPinned className="h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
           ) : (
-            <MapPinned className="h-4 w-4 shrink-0 text-emerald-700" />
+            <MapPinned className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
           )}
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-foreground">
             {valueLabel}
@@ -289,19 +304,25 @@ function PlaceSearchField({
               setTimeout(() => inputRef.current?.focus(), 0)
             }}
             className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Borrar"
+            aria-label={`Borrar ${variant === "origin" ? "origen" : "destino"}`}
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       ) : (
         <div
           className={`flex items-center gap-1.5 rounded-lg bg-background px-2 py-1.5 ${ringClass} border`}
         >
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
             ref={inputRef}
             type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={open && hits.length > 0 && !valueLabel}
+            aria-controls={open && hits.length > 0 ? listId : undefined}
+            aria-haspopup="listbox"
+            aria-label={placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => {
@@ -325,40 +346,47 @@ function PlaceSearchField({
             autoComplete="off"
           />
           {loading ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Buscando lugares..." />
           ) : (
             <button
               type="button"
               onClick={onMapPick}
               title="Marcar en el mapa"
-              aria-label="Marcar en el mapa"
+              aria-label={`Marcar ${variant === "origin" ? "origen" : "destino"} en el mapa`}
               className={`rounded-md p-1 transition-colors ${
                 mapPickActive
                   ? "bg-emerald-600/15 text-emerald-800"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
-              <MapPinned className="h-4 w-4" />
+              <MapPinned className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
       )}
 
       {error && (
-        <p className="mt-1 px-1 text-[10px] text-destructive">{error}</p>
+        <p role="alert" className="mt-1 px-1 text-[10px] text-destructive">{error}</p>
       )}
 
       {open && hits.length > 0 && !valueLabel && (
-        <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={`Resultados para ${placeholder}`}
+          className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+        >
           {hits.map((hit) => (
-            <li key={hit.id}>
+            <li key={hit.id} role="presentation">
               <button
                 type="button"
+                role="option"
+                aria-selected={false}
                 onMouseDown={(e) => {
                   e.preventDefault()
                 }}
                 onClick={() => void resolveAndSelect(hit)}
-                className="flex w-full flex-col gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-muted/70 cursor-pointer"
+                className="flex w-full flex-col gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-muted/70 focus:bg-muted/90 focus:outline-none cursor-pointer"
               >
                 <span className="text-[12px] font-medium leading-snug text-foreground">
                   {hit.label}
@@ -486,6 +514,8 @@ export function TripPlanner({
     })
   }, [userLocation?.lat, userLocation?.lng, origin?.id])
 
+  const [a11yLiveMessage, setA11yLiveMessage] = useState<string>("")
+
   function selectOrigin(hit: SearchHit) {
     if (hit.lat == null || hit.lng == null) return
     setOrigin({
@@ -497,6 +527,8 @@ export function TripPlanner({
       fuente: hit.fuente,
     })
     setFocusField("destination")
+    setDestFocusTrigger(Date.now())
+    setA11yLiveMessage(`Origen seleccionado: ${hit.label}. Por favor, indique o busque su destino.`)
     setFormError(null)
   }
 
@@ -513,6 +545,7 @@ export function TripPlanner({
     if (hit.tipo === "empresa" && hit.meta?.cod_catalogo != null) {
       setSelectedCodCatalogo(String(hit.meta.cod_catalogo))
     }
+    setA11yLiveMessage(`Destino seleccionado: ${hit.label}. Presione el botón Planificar para calcular la ruta.`)
     setFormError(null)
   }
 
@@ -558,6 +591,11 @@ export function TripPlanner({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {/* Región accesible para anuncios a lectores de pantalla (TalkBack / VoiceOver) */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {a11yLiveMessage}
+      </div>
+
       <button
         type="button"
         onClick={onToggle}

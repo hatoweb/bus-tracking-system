@@ -13,7 +13,10 @@ import {
   User,
   FileText,
   Clock,
-  History
+  History,
+  Mic,
+  MicOff,
+  MapPin,
 } from "lucide-react"
 import { apiUrl } from "@/lib/base-path"
 
@@ -36,20 +39,117 @@ type ReclamoItem = {
 type FeedbackPanelProps = {
   userEmail?: string
   userName?: string
+  currentBusInfo?: {
+    meanId?: string
+    lineaLabel?: string
+    empresa?: string
+  } | null
+  userLocation?: { lat: number; lng: number } | null
+  nearestStopName?: string | null
+  onAnnounce?: (msg: string) => void
 }
 
-export function FeedbackPanel({ userEmail, userName }: FeedbackPanelProps) {
+export function FeedbackPanel({
+  userEmail,
+  userName,
+  currentBusInfo,
+  userLocation,
+  nearestStopName,
+  onAnnounce,
+}: FeedbackPanelProps) {
   const [activeSubTab, setActiveSubTab] = useState<"nuevo" | "historial">("nuevo")
-  const [type, setType] = useState<FeedbackType>("reclamo")
+  const [type, setType] = useState<FeedbackType>(
+    currentBusInfo ? "reporte_bus" : "reclamo"
+  )
   const [nombre, setNombre] = useState(userName || "")
   const [contacto, setContacto] = useState(userEmail || "")
-  const [linea, setLinea] = useState("")
+  const [linea, setLinea] = useState(
+    currentBusInfo?.lineaLabel ||
+      (currentBusInfo?.meanId ? `Bus #${currentBusInfo.meanId}` : "")
+  )
   const [mensaje, setMensaje] = useState("")
   const [submittedTicket, setSubmittedTicket] = useState<ReclamoItem | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(true)
+  const recognitionRef = useRef<any>(null)
 
   const [historial, setHistorial] = useState<ReclamoItem[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(false)
+
+  // Sincronizar contexto automático de bus/línea
+  useEffect(() => {
+    if (currentBusInfo?.lineaLabel) {
+      setLinea(currentBusInfo.lineaLabel)
+    } else if (currentBusInfo?.meanId) {
+      setLinea(`Bus #${currentBusInfo.meanId}${currentBusInfo.empresa ? ` (${currentBusInfo.empresa})` : ""}`)
+    }
+  }, [currentBusInfo])
+
+  // Inicializar Web Speech Recognition API
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        setSpeechSupported(false)
+      }
+    }
+  }, [])
+
+  const toggleSpeechRecognition = () => {
+    if (typeof window === "undefined") return
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      onAnnounce?.("Tu navegador no soporta dictado por voz.")
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      onAnnounce?.("Dictado finalizado.")
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.lang = "es-PY"
+      recognition.continuous = false
+      recognition.interimResults = false
+
+      recognition.onstart = () => {
+        setIsListening(true)
+        onAnnounce?.("Escuchando. Dictá tu reporte ahora.")
+      }
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0]?.[0]?.transcript
+        if (transcript) {
+          setMensaje((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript))
+          onAnnounce?.(`Texto capturado: ${transcript}`)
+        }
+      }
+
+      recognition.onerror = (err: any) => {
+        console.warn("Error en SpeechRecognition:", err)
+        setIsListening(false)
+        onAnnounce?.("No se pudo reconocer la voz.")
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+      }
+
+      recognitionRef.current = recognition
+      recognition.start()
+    } catch (e) {
+      console.error("Error iniciando SpeechRecognition:", e)
+      setIsListening(false)
+    }
+  }
 
   // Sincronizar con props del usuario si cambian
   useEffect(() => {
@@ -293,16 +393,63 @@ export function FeedbackPanel({ userEmail, userName }: FeedbackPanelProps) {
               />
             </div>
 
+            {/* Contexto capturado automáticamente para baja carga cognitiva */}
+            {(userLocation || currentBusInfo || nearestStopName) && (
+              <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-[11px] text-sky-950">
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-600" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-sky-900">Contexto adjuntado automáticamente:</span>
+                  <p className="mt-0.5 text-[10.5px] text-sky-800">
+                    {userLocation ? `GPS: ${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : ""}
+                    {nearestStopName ? ` · Parada: ${nearestStopName}` : ""}
+                    {currentBusInfo?.meanId ? ` · Bus #${currentBusInfo.meanId}` : ""}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Mensaje / Descripción */}
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-card-foreground">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                Detalle del reclamo / consulta <span className="text-destructive">*</span>
-              </label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-card-foreground">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  Detalle del reclamo / consulta <span className="text-destructive">*</span>
+                </label>
+
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleSpeechRecognition}
+                    aria-label={isListening ? "Detener dictado por voz" : "Dictar mensaje por voz"}
+                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all ${
+                      isListening
+                        ? "bg-destructive text-destructive-foreground animate-pulse shadow-sm"
+                        : "bg-muted text-foreground hover:bg-muted/80"
+                    }`}
+                    title="Tocar para dictar tu reclamo con la voz"
+                  >
+                    {isListening ? (
+                      <>
+                        <MicOff className="h-3 w-3" />
+                        <span>Escuchando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="h-3 w-3 text-primary" />
+                        <span>Dictar por voz</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
               <textarea
                 required
                 rows={3}
-                placeholder="Describe detalladamente lo sucedido..."
+                placeholder={
+                  isListening
+                    ? "Escuchando... podés hablar ahora"
+                    : "Describe lo sucedido o tocá 'Dictar por voz'..."
+                }
                 value={mensaje}
                 onChange={(e) => setMensaje(e.target.value)}
                 className="w-full rounded-lg border border-input bg-background p-2 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"

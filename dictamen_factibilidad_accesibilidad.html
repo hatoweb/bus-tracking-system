@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dictamen de Factibilidad Técnica - Accesibilidad Universal GeoBus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-main: #0b1120;
+      --bg-surface: #111b33;
+      --bg-surface-elevated: #162444;
+      --bg-card: rgba(17, 27, 51, 0.85);
+      --border-subtle: #1e2f57;
+      --border-focus: #38bdf8;
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --emerald-accent: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --sky-accent: #0284c7;
+      --sky-light: #38bdf8;
+      --amber-accent: #f59e0b;
+      --indigo-accent: #6366f1;
+      --rose-accent: #f43f5e;
+      
+      --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 60%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    /* Header & Badges */
+    header {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 2.5rem;
+      margin-bottom: 2rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #0284c7, #10b981, #f59e0b, #6366f1);
+    }
+
+    .header-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .institution-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--sky-light);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 0.45rem 1.1rem;
+      border-radius: 999px;
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 12px #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #ffffff;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 1.05rem;
+      color: var(--text-secondary);
+      max-width: 900px;
+      line-height: 1.5;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-top: 1.8rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .meta-item strong {
+      color: var(--text-primary);
+      margin-right: 0.25rem;
+    }
+
+    /* Actions Bar */
+    .actions-bar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      border: none;
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: #0369a1;
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-outline:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+    }
+
+    /* Stat Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(8px);
+      position: relative;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 800;
+      color: #ffffff;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .stat-desc {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 0.4rem;
+    }
+
+    /* Section Styles */
+    section {
+      margin-bottom: 3rem;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .section-title svg {
+      color: var(--sky-light);
+    }
+
+    /* Matrix Table Card */
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.4);
+      margin-bottom: 2rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 1.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .requirement-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1rem;
+      color: #ffffff;
+      margin-bottom: 0.35rem;
+    }
+
+    .requirement-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .badge-feasibility {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .badge-alta {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-media-alta {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .effort-tag {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .code-ref {
+      font-family: monospace;
+      font-size: 0.78rem;
+      background: rgba(0, 0, 0, 0.4);
+      color: #f1f5f9;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Roadmap Timeline */
+    .roadmap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .phase-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .phase-badge {
+      display: inline-flex;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+      width: fit-content;
+    }
+
+    .phase-1 .phase-badge { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .phase-2 .phase-badge { background: rgba(2, 132, 199, 0.2); color: #38bdf8; }
+    .phase-3 .phase-badge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .phase-4 .phase-badge { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+
+    .phase-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.75rem;
+    }
+
+    .phase-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      flex-grow: 1;
+    }
+
+    .phase-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .phase-list li::before {
+      content: "•";
+      color: var(--sky-light);
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+
+    /* Mentorship Highlight Box */
+    .highlight-card {
+      background: linear-gradient(135deg, rgba(2, 132, 199, 0.15), rgba(16, 185, 129, 0.1));
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 18px;
+      padding: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .highlight-title {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .highlight-item h4 {
+      color: var(--sky-light);
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .highlight-item p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2.5rem 0 1rem;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        padding: 0;
+      }
+      .actions-bar {
+        display: none !important;
+      }
+      header, .stat-card, .table-container, .phase-card, .highlight-card {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+        color: #0f172a !important;
+      }
+      h1, .requirement-title, .phase-title, .stat-value, .highlight-title {
+        color: #0f172a !important;
+      }
+      .subtitle, .requirement-desc, .phase-list, p, td, th {
+        color: #334155 !important;
+      }
+      .code-ref {
+        background: #f1f5f9 !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body { padding: 1rem; }
+      header { padding: 1.5rem; }
+      h1 { font-size: 1.7rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Actions Bar -->
+    <div class="actions-bar">
+      <button class="btn btn-outline" onclick="window.print()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"></path></svg>
+        Imprimir / Exportar a PDF
+      </button>
+    </div>
+
+    <!-- Header -->
+    <header>
+      <div class="header-top">
+        <div class="institution-tag">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+          MOPC · Viceministerio de Transporte (CID) · Programa Innovadores Públicos
+        </div>
+        <div class="status-badge">
+          DICTAMEN: 100% FACTIBLE TÉCNICAMENTE
+        </div>
+      </div>
+
+      <h1>Dictamen de Factibilidad Técnica: Requerimientos de Accesibilidad Universal</h1>
+      <p class="subtitle">
+        Evaluación exhaustiva de implementación para la integración de lectores de pantalla (TalkBack / VoiceOver), modo invitado sin fricción, telemetría dual predictiva, orientación estilo Lazarillo y canales de reclamo por voz en el sistema <strong>GeoBus</strong>.
+      </p>
+
+      <div class="meta-bar">
+        <div class="meta-item"><strong>Fuente de Requerimientos:</strong> Reunión de Co-diseño con Unión Nacional de Personas con Discapacidad (Alesis)</div>
+        <div class="meta-item"><strong>Plataforma:</strong> Next.js 16 + React 19 + Capacitor 7 + PostgreSQL / PostGIS</div>
+        <div class="meta-item"><strong>Fecha:</strong> 26 de Agosto, 2026</div>
+      </div>
+    </header>
+
+    <!-- Stat Highlights -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Viabilidad General</div>
+        <div class="stat-value" style="color: #34d399;">100%</div>
+        <div class="stat-desc">Los 6 ejes evaluados son completamente ejecutables en el stack actual.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Ejes de Intervención</div>
+        <div class="stat-value" style="color: #38bdf8;">6 Ejes</div>
+        <div class="stat-desc">Foco asistido, Modo Invitado, Telemetría, Lazarillo, Corredores y Reclamos.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Quick Wins (Fase 1)</div>
+        <div class="stat-value" style="color: #fbbf24;">3 Módulos</div>
+        <div class="stat-desc">Apertura sin login obligatorio, persistencia local y solución de foco.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Impacto Ciudadano</div>
+        <div class="stat-value" style="color: #818cf8;">Universal</div>
+        <div class="stat-desc">Beneficio directo para no videntes, adultos mayores y usuarios nocturnos.</div>
+      </div>
+    </div>
+
+    <!-- Main Diagnostic Section -->
+    <section>
+      <h2 class="section-title">
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+        Matriz de Diagnóstico y Factibilidad Detallada
+      </h2>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25%;">Eje / Requerimiento</th>
+              <th style="width: 32%;">Diagnóstico en Código Actual</th>
+              <th style="width: 31%;">Estrategia Técnica de Solución</th>
+              <th style="width: 12%;">Factibilidad / Esfuerzo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 1. Navegación Asistida -->
+            <tr>
+              <td>
+                <div class="requirement-title">1.1 Gestión Programática del Foco</div>
+                <div class="requirement-desc">Evitar la pérdida de foco al seleccionar origen y no reiniciar la lectura desde la barra superior.</div>
+              </td>
+              <td>
+                En <span class="code-ref">trip-planner.tsx</span>, al seleccionar una sugerencia de origen, el contenedor se desmonta (<span class="code-ref">setOpen(false)</span>). Al destruirse el nodo activo, TalkBack y VoiceOver pierden la referencia y se reinician en el tope de la pantalla.
+              </td>
+              <td>
+                Vincular la selección de origen con un foco forzado a través de <span class="code-ref">destinationInputRef.current?.focus()</span> con <span class="code-ref">tabIndex={-1}</span> antes del unmount, complementado con región accesible <span class="code-ref">aria-live="polite"</span>.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1-2 Días</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">1.2 Semántica WAI-ARIA Universal</div>
+                <div class="requirement-desc">Eliminar botones mudos y asegurar roles nativos para lectura secuencial flick/flip.</div>
+              </td>
+              <td>
+                Varios botones de iconos (<span class="code-ref">lucide-react</span>), modales y selectores en <span class="code-ref">bus-tracker.tsx</span> carecen de <span class="code-ref">aria-label</span> explícito o de atributos dinámicos como <span class="code-ref">aria-expanded</span>.
+              </td>
+              <td>
+                Auditoría completa WCAG 2.1 AA. Homogeneizar <span class="code-ref">aria-label</span> descriptivos, roles interactivos (<span class="code-ref">role="combobox"</span>, <span class="code-ref">role="listbox"</span>) y títulos accesibles en todos los componentes.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1-2 Días</div>
+              </td>
+            </tr>
+
+            <!-- 2. Acceso Libre -->
+            <tr>
+              <td>
+                <div class="requirement-title">2.1 Modo Invitado (Login Opcional)</div>
+                <div class="requirement-desc">Consultar líneas, paradas y GPS en tiempo real inmediatamente sin registro forzoso.</div>
+              </td>
+              <td>
+                <strong>Bloqueo estricto:</strong> <span class="code-ref">middleware.ts</span> (líneas 61-66) intercepta cualquier acceso y redirige a <span class="code-ref">/login</span>. Además, <span class="code-ref">bus-tracker.tsx</span> fuerza redirección si la sesión no está autenticada.
+              </td>
+              <td>
+                Modificar <span class="code-ref">middleware.ts</span> para permitir acceso público anónimo a <span class="code-ref">/</span>. Remover redirección forzada en el cliente y añadir en <span class="code-ref">login/page.tsx</span> un botón visible: <em>"Continuar como invitado"</em>.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">Horas</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">2.2 Persistencia Local Offline</div>
+                <div class="requirement-desc">Guardar favoritos, paradas frecuentes y preferencias de voz en el dispositivo sin cuenta en servidor.</div>
+              </td>
+              <td>
+                Actualmente no se utiliza <span class="code-ref">localStorage</span>. Cualquier ajuste de accesibilidad auditiva o parada de interés se pierde al refrescar o cerrar la aplicación.
+              </td>
+              <td>
+                Implementar un servicio de almacenamiento local con <span class="code-ref">localStorage</span> (compatible al 100% con Capacitor Android/iOS WebView) para preferencias, favoritos y búsquedas recientes, con opción de sync en la nube si inicia sesión.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1 Día</div>
+              </td>
+            </tr>
+
+            <!-- 3. Telemetría Dual y Alertas -->
+            <tr>
+              <td>
+                <div class="requirement-title">3.1 Telemetría Dual (Distancia + Tiempo)</div>
+                <div class="requirement-desc">Anunciar distancia métrica simultánea con el tiempo estimado: ej. "Línea 27 a 450 m, en 3 min".</div>
+              </td>
+              <td>
+                <span class="code-ref">lib/bus-accesibilidad.ts</span> y <span class="code-ref">app/api/buses/route.ts</span> ya calculan <span class="code-ref">distanceMeters</span> y <span class="code-ref">eta_minutos</span>, pero el sintetizador en <span class="code-ref">bus-tracker.tsx</span> solo lee la velocidad y estado simple.
+              </td>
+              <td>
+                Formatear las emisiones auditivas de <span class="code-ref">useVoiceAnnouncer</span> integrando ambas métricas con dicción adaptada: <em>"Línea [X] a [distancia] metros, aproximándose en [Y] minutos"</em>.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1 Día</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">3.2 Alertas Hápticas Periódicas (Hitos 500/200/50m)</div>
+                <div class="requirement-desc">Vibraciones y avisos sonoros graduados para saber cuándo prepararse y cuándo levantar la mano.</div>
+              </td>
+              <td>
+                No existen alertas de proximidad graduadas ni llamadas a la API de vibración en el frontend de seguimiento.
+              </td>
+              <td>
+                Implementar un vigilante de proximidad por umbrales: <strong>500m</strong> (aviso preventivo), <strong>200m</strong> (vibración doble: preparar abordaje) y <strong>50m</strong> (vibración prolongada: <em>"Levante la mano"</em>) vía Web Vibration API (<span class="code-ref">navigator.vibrate</span>).
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1-2 Días</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">3.3 Radio Adaptativo a 2.000 Metros</div>
+                <div class="requirement-desc">Expandir automáticamente el área de detección perimetral al activar modo accesible.</div>
+              </td>
+              <td>
+                El estado <span class="code-ref">nearbyRadioM</span> en <span class="code-ref">bus-tracker.tsx</span> está cableado por defecto a 1.200 m, aunque la API ya acepta el parámetro.
+              </td>
+              <td>
+                Conectar el toggle del modo accesible para conmutar <span class="code-ref">nearbyRadioM</span> dinámicamente a 2.000 metros y forzar el refresco de unidades en camino.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">Horas</div>
+              </td>
+            </tr>
+
+            <!-- 4. Orientación Contextual -->
+            <tr>
+              <td>
+                <div class="requirement-title">4.1 Botón "¿Dónde estoy?" (Estilo Lazarillo)</div>
+                <div class="requirement-desc">Lectura auditiva de la posición relativa y referencias urbanas inmediatas.</div>
+              </td>
+              <td>
+                Existe geocodificación directa en <span class="code-ref">app/api/geocode</span> (Nominatim), pero no existe endpoint ni interfaz de geocodificación inversa descriptiva.
+              </td>
+              <td>
+                Crear endpoint <span class="code-ref">/api/geocode/reverse</span> que consulte Nominatim Reverse + cruce espacial PostGIS con <span class="code-ref">geometria.paradas_oficiales</span>, emitiendo por voz: <em>"Estás sobre [Calle], esquina [Cruce]. Parada más cercana a 40 metros"</em>.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-media-alta">MEDIA - ALTA</span>
+                <div class="effort-tag">2-3 Días</div>
+              </td>
+            </tr>
+
+            <!-- 5. Ejes Viales y Corredores -->
+            <tr>
+              <td>
+                <div class="requirement-title">5.1 Búsqueda por Intersecciones y Calles</div>
+                <div class="requirement-desc">Permitir buscar "Eusebio Ayala y Defensores" sin exigir códigos de paradas.</div>
+              </td>
+              <td>
+                La búsqueda combina lugares locales de la BD y geocodificación Nominatim, pero las intersecciones complejas con conectores ("y", "esquina") sufren discrepancias de coincidencia.
+              </td>
+              <td>
+                Incorporar normalizador de cadenas para intersecciones viales en el endpoint de geocodificación y priorizar ejes arteriales en el ordenamiento de resultados.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1-2 Días</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">5.2 Filtro Directo por Línea (Sin Origen Forzoso)</div>
+                <div class="requirement-desc">Seleccionar una línea y visualizar de inmediato su recorrido y unidades activas en tiempo real.</div>
+              </td>
+              <td>
+                El seguimiento exige o bien seleccionar empresa en itinerarios o rellenar origen y destino en el planificador de viaje.
+              </td>
+              <td>
+                Añadir un selector unificado de Línea / Empresa en la cabecera del mapa que cargue directamente la traza de la ruta y los colectivos activos sin forzar el paso por origen.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1-2 Días</div>
+              </td>
+            </tr>
+
+            <!-- 6. Reclamos Accesibles -->
+            <tr>
+              <td>
+                <div class="requirement-title">6.1 Reportes Asistidos con Contexto Automático</div>
+                <div class="requirement-desc">Capturar automáticamente parada, línea, hora y GPS al formular un reclamo o incidencia.</div>
+              </td>
+              <td>
+                <span class="code-ref">feedback-panel.tsx</span> le solicita al usuario tipear manualmente el nombre de la línea o datos operativos, aumentando la fricción.
+              </td>
+              <td>
+                Inyectar las propiedades del bus seleccionado o parada cercana y las coordenadas GPS activas como valores por defecto al abrir el panel de reclamos.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">1 Día</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="requirement-title">6.2 Dictado por Voz en Reclamos</div>
+                <div class="requirement-desc">Botón de un solo toque para grabar o transcribir sugerencias e incidencias.</div>
+              </td>
+              <td>
+                El formulario actual solo cuenta con campos de texto para entrada manual por teclado.
+              </td>
+              <td>
+                Integrar la Web Speech Recognition API (<span class="code-ref">SpeechRecognition</span> con idioma <span class="code-ref">es-PY</span> / <span class="code-ref">es-419</span>) con señal auditiva de inicio y fin para dictar directamente el reclamo.
+              </td>
+              <td>
+                <span class="badge-feasibility badge-alta">ALTA</span>
+                <div class="effort-tag">2 Días</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Mentorship Focus Box -->
+    <div class="highlight-card">
+      <div class="highlight-title">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        Puntos Clave para la Mentoría del Concurso ("Innovadores Públicos - VMT")
+      </div>
+      <div class="highlight-grid">
+        <div class="highlight-item">
+          <h4>1. Co-diseño HCD con Usuarios Reales</h4>
+          <p>
+            El proyecto no asume hipótesis abstractas: incorpora directamente la devolución técnica de la Unión Nacional de Personas con Discapacidad (Alesis), convirtiendo las barreras reales en requerimientos funcionales medibles.
+          </p>
+        </div>
+        <div class="highlight-item">
+          <h4>2. Eliminación Total de Fricción</h4>
+          <p>
+            La implementación del Modo Invitado y la persistencia local garantizan que cualquier ciudadano en una parada acceda a los datos en menos de 3 segundos, sin barreras de registro obligatorio.
+          </p>
+        </div>
+        <div class="highlight-item">
+          <h4>3. Telemetría Dual y Avisos Hápticos</h4>
+          <p>
+            Se transforma el dato crudo de GPS en una experiencia multimodal (visual, auditiva y táctil por vibración) con hitos de acción concreta: saber con certeza métrica cuándo prepararse y cuándo levantar la mano.
+          </p>
+        </div>
+        <div class="highlight-item">
+          <h4>4. Métricas Validadas (SUS + UEQ)</h4>
+          <p>
+            Se aplicarán los cuestionarios System Usability Scale (SUS) y User Experience Questionnaire (UEQ) a paneles de usuarios con discapacidad visual para validar la reducción efectiva del tiempo de espera y la ansiedad en la vía pública.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Implementation Roadmap -->
+    <section>
+      <h2 class="section-title">
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Hoja de Ruta de Implementación Sugerida
+      </h2>
+
+      <div class="roadmap-grid">
+        <!-- Fase 1 -->
+        <div class="phase-card phase-1">
+          <div class="phase-badge">Fase 1 · Inmediata (Quick Wins)</div>
+          <div class="phase-title">Barreras Críticas y Acceso Libre</div>
+          <ul class="phase-list">
+            <li>Habilitación del Modo Invitado (desbloqueo de <span class="code-ref">middleware.ts</span>).</li>
+            <li>Corrección programática del foco para TalkBack y VoiceOver en origen/destino.</li>
+            <li>Persistencia local en <span class="code-ref">localStorage</span> (favoritos y ajustes de voz).</li>
+            <li>Auditoría y remediación de etiquetas WAI-ARIA.</li>
+          </ul>
+        </div>
+
+        <!-- Fase 2 -->
+        <div class="phase-card phase-2">
+          <div class="phase-badge">Fase 2 · Corto Plazo</div>
+          <div class="phase-title">Telemetría y Alertas Hápticas</div>
+          <ul class="phase-list">
+            <li>Emisión de telemetría dual (distancia métrica + tiempo estimado) por voz.</li>
+            <li>Alertas hápticas por vibración en hitos: 500m, 200m y 50m ("Levantar la mano").</li>
+            <li>Ampliación adaptativa del radio de búsqueda a 2.000m en modo accesible.</li>
+          </ul>
+        </div>
+
+        <!-- Fase 3 -->
+        <div class="phase-card phase-3">
+          <div class="phase-badge">Fase 3 · Mediano Plazo</div>
+          <div class="phase-title">Ejes Viales y Filtro Directo</div>
+          <ul class="phase-list">
+            <li>Filtro directo de Línea y Empresa en el mapa sin obligar a definir origen.</li>
+            <li>Normalización de consultas por nombres comunes e intersecciones ("Calle A y B").</li>
+            <li>Agrupación de líneas por corredor vial troncal en la BD CID.</li>
+          </ul>
+        </div>
+
+        <!-- Fase 4 -->
+        <div class="phase-card phase-4">
+          <div class="phase-badge">Fase 4 · Experiencia Avanzada</div>
+          <div class="phase-title">Orientación Lazarillo y Dictado</div>
+          <ul class="phase-list">
+            <li>Botón accesible de orientación contextual "¿Dónde estoy?".</li>
+            <li>Endpoint de geocodificación inversa con referencias urbanas del AMA.</li>
+            <li>Formulario de reclamos asistido con contexto automático y dictado por voz.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>GeoBus · Proyecto de Previsibilidad del Transporte Público Metropolitano · Viceministerio de Transporte (MOPC) / CID</p>
+      <p style="margin-top: 0.25rem;">Documento elaborado para el análisis de requerimientos del Programa Innovadores Públicos.</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

@@ -12,13 +12,16 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
   const base = getBasePath()
 
+  const isRoot = path === "/" || path === base || path === `${base}/` || path === ""
   const isPublic =
+    isRoot ||
     path.includes("/login") ||
     path.includes("/api/auth") ||
     path.includes("/api/health") ||
     path.includes("/favicon") ||
     path.includes("/icon") ||
     path.includes("/apple-icon") ||
+    path.endsWith(".html") ||
     path.includes("/api/")
 
   if (isPublic) {
