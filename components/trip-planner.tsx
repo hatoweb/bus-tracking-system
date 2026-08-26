@@ -66,6 +66,7 @@ type TripPlannerProps = {
     origin: TripPlace | null,
     destination: TripPlace | null
   ) => void
+  onClearTrip?: () => void
 }
 
 function PlaceSearchField({
@@ -78,6 +79,7 @@ function PlaceSearchField({
   onSelect,
   onMapPick,
   autoFocus,
+  focusTrigger,
 }: {
   variant: "origin" | "destination"
   valueLabel?: string
@@ -88,6 +90,7 @@ function PlaceSearchField({
   onSelect: (hit: SearchHit) => void
   onMapPick: () => void
   autoFocus?: boolean
+  focusTrigger?: number
 }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -110,11 +113,30 @@ function PlaceSearchField({
     return () => document.removeEventListener("mousedown", onDocClick)
   }, [])
 
+  // Si se activa focusTrigger para editar y ya tenía valor fijo, pasarlo a query editable
   useEffect(() => {
-    if (autoFocus && !valueLabel) {
-      inputRef.current?.focus()
+    if (focusTrigger && focusTrigger > 0 && variant === "destination" && valueLabel) {
+      setQuery(valueLabel)
+      onClear()
     }
-  }, [autoFocus, valueLabel])
+  }, [focusTrigger, variant, valueLabel, onClear])
+
+  useEffect(() => {
+    if ((focusTrigger && focusTrigger > 0) || (autoFocus && !valueLabel)) {
+      if (!valueLabel) {
+        const t1 = setTimeout(() => {
+          inputRef.current?.focus()
+        }, 80)
+        const t2 = setTimeout(() => {
+          inputRef.current?.focus()
+        }, 220)
+        return () => {
+          clearTimeout(t1)
+          clearTimeout(t2)
+        }
+      }
+    }
+  }, [focusTrigger, autoFocus, valueLabel])
 
   const runSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
@@ -247,7 +269,16 @@ function PlaceSearchField({
     <div ref={wrapRef} className="relative">
       {valueLabel ? (
         <div
-          className={`flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 ${ringClass} border`}
+          onClick={() => {
+            setQuery(valueLabel)
+            onClear()
+            setTimeout(() => {
+              inputRef.current?.focus()
+              inputRef.current?.select()
+            }, 50)
+          }}
+          title="Tocá para editar"
+          className={`flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 ${ringClass} border cursor-pointer hover:bg-muted/80`}
         >
           {variant === "origin" ? (
             <MapPinned className="h-4 w-4 shrink-0 text-sky-500" />
@@ -259,8 +290,10 @@ function PlaceSearchField({
           </span>
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation()
               onClear()
+              setQuery("")
               setTimeout(() => inputRef.current?.focus(), 0)
             }}
             className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -354,6 +387,7 @@ export function TripPlanner({
   mapPickedPoint = null,
   onMapPickedPointConsumed,
   onDraftPlacesChange,
+  onClearTrip,
 }: TripPlannerProps) {
   const [origin, setOrigin] = useState<TripPlace | null>(null)
   const [destination, setDestination] = useState<TripPlace | null>(null)
@@ -362,6 +396,7 @@ export function TripPlanner({
   const [focusField, setFocusField] = useState<"origin" | "destination">(
     "destination"
   )
+  const [destFocusTrigger, setDestFocusTrigger] = useState(0)
   const [secureContext, setSecureContext] = useState(true)
   const httpsGpsUrl =
     typeof window !== "undefined"
@@ -376,20 +411,29 @@ export function TripPlanner({
 
   const lastDraftKeyRef = useRef<string>("")
 
-  // Al descolapsar: pre-poblar origen con GPS (si disponible) y enfocar destino
+  // Al descolapsar: origen por defecto ubicación actual y cursor en destino listo para editar
   useEffect(() => {
     if (!expanded) return
-    if (!origin && userLocation) {
-      setOrigin({
-        id: "gps:live",
-        label: "Mi ubicación actual",
-        lat: userLocation.lat,
-        lng: userLocation.lng,
-        tipo: "gps",
-        fuente: "geolocation",
-      })
+
+    // 1. Origen por defecto: ubicación actual (GPS)
+    if (!origin || origin.id === "gps:live") {
+      if (userLocation) {
+        setOrigin({
+          id: "gps:live",
+          label: "Mi ubicación actual",
+          lat: userLocation.lat,
+          lng: userLocation.lng,
+          tipo: "gps",
+          fuente: "geolocation",
+        })
+      } else {
+        onUseGpsOrigin()
+      }
     }
+
+    // 2. Foco inmediato en destino para editar
     setFocusField("destination")
+    setDestFocusTrigger(Date.now())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded])
 
@@ -514,7 +558,7 @@ export function TripPlanner({
         aria-expanded={expanded}
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/40"
       >
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-sm font-bold text-foreground">
             <Navigation className="h-4 w-4 shrink-0 text-primary" />
             Ruta
@@ -529,11 +573,30 @@ export function TripPlanner({
             </span>
           )}
         </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`}
-        />
+        <div className="flex items-center gap-1.5 shrink-0">
+          {(destinationSummary || destination) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setDestination(null)
+                setFormError(null)
+                onClearTrip?.()
+              }}
+              title="Limpiar viaje planificado"
+              aria-label="Limpiar viaje"
+              className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span>Limpiar</span>
+            </button>
+          )}
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        </div>
       </button>
 
       <div
@@ -606,6 +669,7 @@ export function TripPlanner({
                   active={focusField === "destination" || !destination}
                   mapPickActive={mapPickMode === "destination"}
                   autoFocus={focusField === "destination" && !destination}
+                  focusTrigger={destFocusTrigger}
                   onClear={() => {
                     setDestination(null)
                     setFocusField("destination")

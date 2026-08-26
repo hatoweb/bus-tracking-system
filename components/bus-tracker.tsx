@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
+  Accessibility,
   Bus as BusIcon,
   CalendarClock,
   Crosshair,
@@ -18,6 +19,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  X,
 } from "lucide-react"
 import {
   type Bus,
@@ -170,6 +172,28 @@ export function BusTracker() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isAlertsModalOpen, setIsAlertsModalOpen] = useState(false)
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
+
+  // Toast banner no bloqueante (reemplazo de window.alert)
+  const [toast, setToast] = useState<{ message: string; type: "warning" | "error" | "info" } | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = useCallback(
+    (message: string, type: "warning" | "error" | "info" = "warning") => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      setToast({ message, type })
+      toastTimerRef.current = setTimeout(() => {
+        setToast(null)
+      }, 6000)
+    },
+    []
+  )
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
 
   // Viaje: origen → destino (formulario desplegable)
   const [tripFormOpen, setTripFormOpen] = useState(false)
@@ -1394,6 +1418,27 @@ export function BusTracker() {
     [nearbyLimit, nearbyRadioM, speak, empresas]
   )
 
+  /** Limpiar viaje planificado y volver a exploración libre de mapa */
+  const handleClearTrip = useCallback(() => {
+    setTripDestination(null)
+    setTripPlan(null)
+    setTripOptions([])
+    setTripSummary(null)
+    setTripSuggestions([])
+    setDestNearbyStops([])
+    setTripGuidance(null)
+    setTripBusFilter(null)
+    setSelectedBoardingStopId(null)
+    setDraftDestination(null)
+    setRealItineraries([])
+    allItinerariesRef.current = []
+    tripBoardingIdsRef.current.clear()
+    tripPreferredStopIdsRef.current.clear()
+    tripAlightingIdsRef.current.clear()
+    showToast("Viaje limpiado. Modo exploración libre.", "info")
+    speak("Viaje cancelado", { force: true })
+  }, [showToast, speak])
+
   /** Elegir parada de abordaje (#1, #2…) y filtrar buses relevantes */
   const handleSelectBoardingStop = useCallback(
     async (stop: NearbyStop) => {
@@ -1428,9 +1473,7 @@ export function BusTracker() {
               : `La parada #${stop.rank || "?"} no es la indicada para ${tripDestination.label}: ${check.reason}`
           setTripSummary(msg)
           speak(msg, { force: true })
-          if (typeof window !== "undefined") {
-            window.alert(msg)
-          }
+          showToast(msg, "warning")
           return
         }
       }
@@ -1635,16 +1678,13 @@ export function BusTracker() {
     // Chrome solo permite GPS en HTTPS o localhost (no en http://IP)
     if (!window.isSecureContext) {
       const httpsUrl = `https://sistemas.mopc.gov.py/prototipo_vmt/`
-      speak(
-        "El GPS requiere HTTPS. Abrí sistemas.mopc.gov.py/prototipo_vmt o marcá el origen en el mapa.",
-        { force: true }
-      )
+      const msg = "El GPS requiere HTTPS. Abrí sistemas.mopc.gov.py/prototipo_vmt o marcá el origen en el mapa."
+      speak(msg, { force: true })
       setTripFormOpen(true)
-      if (typeof window !== "undefined") {
-        window.alert(
-          `El navegador bloquea el GPS en HTTP.\n\nAbrí:\n${httpsUrl}\n\nTambién podés marcar el origen en el mapa.`
-        )
-      }
+      showToast(
+        `El navegador bloquea el GPS en HTTP. Abrí la versión segura (${httpsUrl}) o marcá el origen en el mapa.`,
+        "error"
+      )
       return
     }
 
@@ -2068,6 +2108,41 @@ export function BusTracker() {
                 )}
               </button>
 
+              {/* Control de accesibilidad: priorizar buses con rampa */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !needsAccessibility
+                  setNeedsAccessibility(next)
+                  speak(
+                    next
+                      ? "Priorizando colectivos con rampa"
+                      : "Filtro de rampa desactivado",
+                    { force: true }
+                  )
+                  showToast(
+                    next
+                      ? "Priorizando colectivos con rampa de accesibilidad"
+                      : "Filtro de accesibilidad desactivado",
+                    "info"
+                  )
+                }}
+                aria-pressed={needsAccessibility}
+                aria-label={needsAccessibility ? "Desactivar filtro de rampa" : "Priorizar colectivos con rampa"}
+                className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  needsAccessibility
+                    ? "border-blue-500 bg-blue-500 text-white shadow-xs font-bold"
+                    : "border-border bg-background text-foreground hover:bg-muted"
+                }`}
+                title={
+                  needsAccessibility
+                    ? "Accesibilidad activada: priorizando colectivos con rampa"
+                    : "Priorizar colectivos con rampa para personas con movilidad reducida"
+                }
+              >
+                <Accessibility className="h-4 w-4" />
+              </button>
+
               {/* Botón Google Login / Perfil */}
               <button
                 type="button"
@@ -2100,9 +2175,25 @@ export function BusTracker() {
                     </span>
                     {nearestBusLabel || "Bus"} a {nearestDistanceMeters}m:
                   </span>
-                  <span className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-xs">
-                    LLEGANDO
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("gps")
+                        if (closestBuses.length > 0) {
+                          const bus = closestBuses[0]
+                          handleSelectBus(bus.mean_id || bus.id)
+                        }
+                        setAutoCenterNearby(true)
+                      }}
+                      className="text-[10px] font-bold underline text-orange-700 hover:text-orange-950"
+                    >
+                      Ver en mapa
+                    </button>
+                    <span className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-xs">
+                      LLEGANDO
+                    </span>
+                  </div>
                 </div>
               ) : proximityStatus === "cercano" ? (
                 <div className="flex w-full items-center justify-between rounded-md bg-yellow-500/15 border border-yellow-500/40 px-2.5 py-1 text-yellow-700">
@@ -2110,9 +2201,25 @@ export function BusTracker() {
                     <span className="h-2.5 w-2.5 rounded-full bg-yellow-500"></span>
                     {nearestBusLabel || "Bus"} a {nearestDistanceMeters}m:
                   </span>
-                  <span className="rounded bg-yellow-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-black shadow-xs">
-                    ACERCÁNDOSE (≤1 km)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("gps")
+                        if (closestBuses.length > 0) {
+                          const bus = closestBuses[0]
+                          handleSelectBus(bus.mean_id || bus.id)
+                        }
+                        setAutoCenterNearby(true)
+                      }}
+                      className="text-[10px] font-bold underline text-yellow-800 hover:text-black"
+                    >
+                      Ver en mapa
+                    </button>
+                    <span className="rounded bg-yellow-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-black shadow-xs">
+                      ACERCÁNDOSE (≤1 km)
+                    </span>
+                  </div>
                 </div>
               ) : proximityStatus === "pasado" ? (
                 <div className="flex w-full items-center justify-between rounded-md bg-slate-500/10 border border-slate-400/40 px-2.5 py-1 text-slate-700">
@@ -2120,9 +2227,25 @@ export function BusTracker() {
                     <AlertCircle className="h-3.5 w-3.5" />
                     {nearestBusLabel || "Bus"} cercano, pero ya pasó tu parada
                   </span>
-                  <span className="rounded bg-slate-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-xs">
-                    NO SIRVE
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("gps")
+                        if (closestBuses.length > 0) {
+                          const bus = closestBuses[0]
+                          handleSelectBus(bus.mean_id || bus.id)
+                        }
+                        setAutoCenterNearby(true)
+                      }}
+                      className="text-[10px] font-bold underline text-slate-700 hover:text-slate-950"
+                    >
+                      Ver en mapa
+                    </button>
+                    <span className="rounded bg-slate-500 px-2 py-0.5 text-[10px] font-extrabold uppercase text-white shadow-xs">
+                      NO SIRVE
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <div className="flex w-full items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 text-emerald-700">
@@ -2132,12 +2255,54 @@ export function BusTracker() {
                     {nearestDistanceMeters ? `${nearestDistanceMeters}m` : "—"}
                     {avgBusSpeedKmh != null ? ` · prom. ${avgBusSpeedKmh} km/h` : ""}
                   </span>
-                  <span className="text-[10px] font-bold text-emerald-600">NORMAL</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("gps")
+                        if (closestBuses.length > 0) {
+                          const bus = closestBuses[0]
+                          handleSelectBus(bus.mean_id || bus.id)
+                        }
+                        setAutoCenterNearby(true)
+                      }}
+                      className="text-[10px] font-bold underline text-emerald-800 hover:text-emerald-950"
+                    >
+                      Ver en mapa
+                    </button>
+                    <span className="text-[10px] font-bold text-emerald-600">NORMAL</span>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </header>
+
+        {/* Banner de aviso / Toast temporal */}
+        {toast && (
+          <div
+            className={`mx-3 mt-2 flex items-start justify-between gap-2.5 rounded-xl border p-2.5 text-xs shadow-md transition-all animate-in slide-in-from-top-2 duration-200 ${
+              toast.type === "error"
+                ? "border-destructive/40 bg-destructive/15 text-destructive"
+                : toast.type === "info"
+                  ? "border-sky-500/40 bg-sky-500/15 text-sky-950"
+                  : "border-amber-500/40 bg-amber-500/15 text-amber-950"
+            }`}
+          >
+            <div className="flex items-start gap-2 leading-tight">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{toast.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="rounded p-0.5 opacity-70 hover:opacity-100"
+              aria-label="Cerrar aviso"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Contenido */}
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -2158,6 +2323,7 @@ export function BusTracker() {
                 planning={tripPlanning}
                 expanded={tripFormOpen}
                 onToggle={() => setTripFormOpen((v) => !v)}
+                onClearTrip={handleClearTrip}
                 destinationSummary={tripDestination?.label || null}
                 mapPickMode={mapPickMode}
                 onRequestMapPick={(mode) => {
@@ -2887,38 +3053,6 @@ export function BusTracker() {
                   </div>
                 )}
 
-                {tripDestination && (
-                  <label className="mb-2 flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-[11px] text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={showMoreStops}
-                      onChange={(e) => {
-                        const on = e.target.checked
-                        setShowMoreStops(on)
-                        showMoreStopsRef.current = on
-                        if (on && nearbyLimit < 8) setNearbyLimit(8)
-                        speak(
-                          on
-                            ? "Mostrando más paradas cercanas"
-                            : "Solo paradas hacia el destino",
-                          { force: true }
-                        )
-                        if (user?.lat != null && user?.lng != null) {
-                          fetchNearbyStopsDebounced(user.lat, user.lng, true)
-                        }
-                      }}
-                      className="mt-0.5 rounded border-input"
-                    />
-                    <span>
-                      <span className="font-semibold">Más paradas</span>
-                      <span className="block text-muted-foreground">
-                        Incluir también las de sentido incorrecto u otras cercanas.
-                        Por defecto solo se ven las correctas (hasta 5).
-                      </span>
-                    </span>
-                  </label>
-                )}
-
                 {!user?.locationShared ? (
                   <p className="text-xs text-muted-foreground">
                     Iniciá sesión / compartí ubicación para ver paradas cercanas vía geo-itinerarios.
@@ -2932,86 +3066,118 @@ export function BusTracker() {
                     No hay paradas en el radio seleccionado.
                   </p>
                 ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {nearbyStops.map((stop, idx) => (
-                      <li key={`${stop.id}-${idx}`}>
-                        <button
-                          type="button"
-                          onClick={() => void handleSelectBoardingStop(stop)}
-                          className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ${
-                            stop.isBoardingSelected
-                              ? "border-teal-600/60 bg-teal-600/15 ring-1 ring-teal-600/40"
-                              : stop.isBoardingRecommended
-                                ? "border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25"
-                                : stop.servedByEmpresa === true
-                                  ? "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20"
-                                  : stop.servedByEmpresa === false
-                                    ? "border-border/70 bg-muted/30 opacity-80 hover:opacity-100"
-                                    : "border-border/70 bg-muted/40 hover:bg-muted"
-                          }`}
-                        >
-                          <span className="min-w-0">
-                            <span
-                              className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                                stop.isBoardingSelected
-                                  ? "bg-teal-700 text-white"
-                                  : stop.isBoardingRecommended
-                                    ? "bg-amber-500 text-gray-900"
-                                    : stop.servedByEmpresa === true
-                                      ? "bg-emerald-500 text-white"
-                                      : stop.servedByEmpresa === false
-                                        ? "bg-slate-400 text-white"
-                                        : "bg-amber-500 text-gray-900"
-                              }`}
-                            >
-                              {stop.rank || idx + 1}
-                            </span>
-                            <span className="font-medium text-foreground">{stop.source_name}</span>
-                            {stop.isBoardingSelected && (
-                              <span className="ml-1 text-[10px] font-bold text-teal-800">
-                                · Elegida
-                              </span>
-                            )}
-                            {!stop.isBoardingSelected && stop.isBoardingRecommended && (
-                              <span className="ml-1 text-[10px] font-bold text-amber-800">
-                                · Abordá aquí
-                              </span>
-                            )}
-                            {tripDestination &&
-                              !stop.isBoardingSelected &&
-                              stop.isBoardingRecommended === false && (
-                              <span className="ml-1 text-[10px] font-bold text-rose-700">
-                                · Sentido incorrecto
-                              </span>
-                            )}
-                            {stop.lineasEmpresa && stop.lineasEmpresa.length > 0 && (
-                              <span className="ml-1 text-[10px] text-emerald-700">
-                                · L{stop.lineasEmpresa.slice(0, 5).join(", L")}
-                              </span>
-                            )}
-                            {stop.empresasAtStop && stop.empresasAtStop.length > 0 && (
-                              <span className="ml-1 block text-[10px] text-muted-foreground">
-                                {stop.empresasAtStop.slice(0, 2).join(" · ")}
-                              </span>
-                            )}
-                          </span>
-                          <span
-                            className={`shrink-0 font-semibold ${
+                  <>
+                    <ul className="flex flex-col gap-1.5">
+                      {nearbyStops.map((stop, idx) => (
+                        <li key={`${stop.id}-${idx}`}>
+                          <button
+                            type="button"
+                            onClick={() => void handleSelectBoardingStop(stop)}
+                            className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ${
                               stop.isBoardingSelected
-                                ? "text-teal-800"
+                                ? "border-teal-600/60 bg-teal-600/15 ring-1 ring-teal-600/40"
                                 : stop.isBoardingRecommended
-                                  ? "text-amber-800"
+                                  ? "border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25"
                                   : stop.servedByEmpresa === true
-                                    ? "text-emerald-700"
-                                    : "text-amber-700"
+                                    ? "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20"
+                                    : stop.servedByEmpresa === false
+                                      ? "border-border/70 bg-muted/30 opacity-80 hover:opacity-100"
+                                      : "border-border/70 bg-muted/40 hover:bg-muted"
                             }`}
                           >
-                            {Math.round(stop.distancia_m)} m
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                            <span className="min-w-0">
+                              <span
+                                className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                                  stop.isBoardingSelected
+                                    ? "bg-teal-700 text-white"
+                                    : stop.isBoardingRecommended
+                                      ? "bg-amber-500 text-gray-900"
+                                      : stop.servedByEmpresa === true
+                                        ? "bg-emerald-500 text-white"
+                                        : stop.servedByEmpresa === false
+                                          ? "bg-slate-400 text-white"
+                                          : "bg-amber-500 text-gray-900"
+                                }`}
+                              >
+                                {stop.rank || idx + 1}
+                              </span>
+                              <span className="font-medium text-foreground">{stop.source_name}</span>
+                              {stop.isBoardingSelected && (
+                                <span className="ml-1 text-[10px] font-bold text-teal-800">
+                                  · Elegida
+                                </span>
+                              )}
+                              {!stop.isBoardingSelected && stop.isBoardingRecommended && (
+                                <span className="ml-1 text-[10px] font-bold text-amber-800">
+                                  · Abordá aquí
+                                </span>
+                              )}
+                              {tripDestination &&
+                                !stop.isBoardingSelected &&
+                                stop.isBoardingRecommended === false && (
+                                <span className="ml-1 text-[10px] font-bold text-rose-700">
+                                  · Sentido incorrecto
+                                </span>
+                              )}
+                              {stop.lineasEmpresa && stop.lineasEmpresa.length > 0 && (
+                                <span className="ml-1 text-[10px] text-emerald-700">
+                                  · L{stop.lineasEmpresa.slice(0, 5).join(", L")}
+                                </span>
+                              )}
+                              {stop.empresasAtStop && stop.empresasAtStop.length > 0 && (
+                                <span className="ml-1 block text-[10px] text-muted-foreground">
+                                  {stop.empresasAtStop.slice(0, 2).join(" · ")}
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={`shrink-0 font-semibold ${
+                                stop.isBoardingSelected
+                                  ? "text-teal-800"
+                                  : stop.isBoardingRecommended
+                                    ? "text-amber-800"
+                                    : stop.servedByEmpresa === true
+                                      ? "text-emerald-700"
+                                      : "text-amber-700"
+                              }`}
+                            >
+                              {Math.round(stop.distancia_m)} m
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {tripDestination && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const on = !showMoreStops
+                          setShowMoreStops(on)
+                          showMoreStopsRef.current = on
+                          if (on && nearbyLimit < 8) setNearbyLimit(8)
+                          speak(
+                            on
+                              ? "Mostrando más paradas cercanas"
+                              : "Solo paradas hacia el destino",
+                            { force: true }
+                          )
+                          if (user?.lat != null && user?.lng != null) {
+                            fetchNearbyStopsDebounced(user.lat, user.lng, true)
+                          }
+                        }}
+                        className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          showMoreStops
+                            ? "border-amber-500/40 bg-amber-500/15 text-amber-900 font-semibold"
+                            : "border-border/70 bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        {showMoreStops
+                          ? "✓ Mostrando más paradas (tocá para filtrar solo recomendadas)"
+                          : "+ Ver más paradas cercanas (otros sentidos)"}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -3054,6 +3220,20 @@ export function BusTracker() {
             </div>
           )}
         </div>
+
+        {/* Botón flotante (FAB) de Reclamos */}
+        {activeTab !== "contacto" && (
+          <button
+            type="button"
+            onClick={() => setIsFeedbackModalOpen(true)}
+            title="Enviar reclamo o sugerencia"
+            aria-label="Enviar reclamo"
+            className="absolute bottom-16 right-4 z-[50] flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="text-[11px]">Reclamo</span>
+          </button>
+        )}
 
         {/* Navegación inferior */}
         <nav
@@ -3111,6 +3291,36 @@ export function BusTracker() {
         isOpen={isAlertsModalOpen}
         onClose={() => setIsAlertsModalOpen(false)}
       />
+
+      {/* Modal flotante de Reclamos y Sugerencias */}
+      {isFeedbackModalOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-3 backdrop-blur-xs animate-in fade-in">
+          <div className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <MessageSquare className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-card-foreground">Reclamos y Sugerencias</h3>
+                  <p className="text-[11px] text-muted-foreground">Atención ciudadana CID</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFeedbackModalOpen(false)}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <FeedbackPanel userEmail={user?.email} userName={user?.name} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Región viva para lectores de pantalla */}
       <p className="sr-only" role="status" aria-live="polite">
