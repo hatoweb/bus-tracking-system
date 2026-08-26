@@ -1805,6 +1805,16 @@ export function BusTracker() {
           : `Bus #${focus.mean_id}`
         setNearestBusLabel(label)
 
+        // Etiqueta más descriptiva para los anuncios de voz
+        const empNombre = focus.eot_nombre || ""
+        const voiceLabel = focus.route_id && empNombre
+          ? `Línea ${focus.route_id} de ${empNombre}`
+          : focus.route_id
+          ? `Línea ${focus.route_id}`
+          : empNombre
+          ? `${empNombre}, bus número ${focus.mean_id}`
+          : `Bus número ${focus.mean_id}`
+
         if (focus.passedBoardingStop) {
           setProximityStatus("pasado")
         } else if (meters <= 400) {
@@ -1824,8 +1834,8 @@ export function BusTracker() {
           approachAlertRef.current = `${focus.mean_id}:in`
           speak(
             meters <= 400
-              ? `${label} llegando, a ${meters} metros.`
-              : `${label} acercándose, a ${meters} metros.`,
+              ? `${voiceLabel} llegando, a ${meters} metros.`
+              : `${voiceLabel} acercándose, a ${meters} metros.`,
             { force: true }
           )
         } else if (focus.passedBoardingStop) {
@@ -1944,9 +1954,14 @@ export function BusTracker() {
         if (realBus) {
           const statusKey = getRealBusStatusKey(realBus.velocidad)
           const statusLabel = STATUS_LABEL[statusKey]
-          const lineStr = realBus.route_id ? `, línea ${realBus.route_id}` : ""
+          const empNombreSelect = (realBus as any).eot_nombre || ""
+          const lineDescSelect = realBus.route_id && empNombreSelect
+            ? `Línea ${realBus.route_id} de ${empNombreSelect}`
+            : realBus.route_id
+            ? `Línea ${realBus.route_id}`
+            : empNombreSelect || `bus número ${realBus.mean_id}`
           const speedStr = realBus.velocidad > 0 ? `${Math.round(realBus.velocidad)} kilómetros por hora` : "detenido"
-          const message = `Seleccionado bus ${realBus.mean_id}${lineStr}. Estado: ${statusLabel}, velocidad ${speedStr}.`
+          const message = `Seleccionado: ${lineDescSelect}. Estado: ${statusLabel}, velocidad ${speedStr}.`
           speak(message, { force: true })
           return
         }
