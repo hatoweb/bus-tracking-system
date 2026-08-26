@@ -40,10 +40,11 @@ export async function GET(request: NextRequest) {
     const userLat = searchParams.get('lat') ? Number(searchParams.get('lat')) : null
     const userLng = searchParams.get('lng') ? Number(searchParams.get('lng')) : null
 
-    // Si se pasa eot_id o cod_catalogo, obtener id_eot_vmt_hex desde public.eots en BBDD_CID
+    // Si se pasa eot_id o cod_catalogo, obtener id_eot_vmt_hex + eot_nombre desde public.eots en BBDD_CID
+    let eotNombre: string | null = null
     if (!agencyId && (eotId || codCatalogo)) {
       try {
-        let eotQuery = `SELECT id_eot_vmt_hex FROM public.eots WHERE `
+        let eotQuery = `SELECT id_eot_vmt_hex, eot_nombre FROM public.eots WHERE `
         const eotValues: any[] = []
         if (codCatalogo) {
           eotValues.push(parseInt(codCatalogo))
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
         const eotRes = await poolCID.query(eotQuery, eotValues)
         if (eotRes.rows.length > 0 && eotRes.rows[0].id_eot_vmt_hex) {
           agencyId = eotRes.rows[0].id_eot_vmt_hex.trim()
+          eotNombre = eotRes.rows[0].eot_nombre || null
         }
       } catch (eotErr) {
         console.error("Error buscando agency_id desde eots:", eotErr)
@@ -194,6 +196,48 @@ export async function GET(request: NextRequest) {
     })
 
     let withAccess = await enrichBusesWithAccesibilidad(processedBuses)
+
+    // Enriquecer con eot_nombre y linea_label (nombre descriptivo de línea) desde CID
+    if (agencyId) {
+      try {
+        // Mapeo route_id (ruta_hex GPS) → descripción de línea
+        const routeIds = [...new Set(withAccess.map((b: any) => String(b.route_id || '').toLowerCase().trim()).filter(Boolean))]
+        let lineaLabelByRouteId = new Map<string, string>()
+        if (routeIds.length > 0) {
+          const { sqlJoinLineaVigente, sqlNumeroLinea } = await import('@/lib/sql-linea-ruta')
+          const lineaRes = await poolCID.query(
+            `SELECT DISTINCT
+               LOWER(TRIM(cr.ruta_hex)) AS route_key,
+               ${sqlNumeroLinea('ln')} AS linea,
+               CAST(cr.ramal AS text) AS ramal
+             FROM public.catalogo_rutas cr
+             JOIN public.eots e ON e.cod_catalogo = cr.id_eot_catalogo
+             ${sqlJoinLineaVigente('cr', 'lrc', 'ln')}
+             WHERE LOWER(TRIM(e.id_eot_vmt_hex)) = $1
+               AND cr.ruta_hex IS NOT NULL`,
+            [agencyId.toLowerCase().trim()]
+          )
+          for (const row of lineaRes.rows) {
+            const key = String(row.route_key || '').trim()
+            if (!key) continue
+            const linea = String(row.linea || '').trim()
+            const ramal = String(row.ramal || '').trim()
+            const label = ramal ? `${linea} - ${ramal}` : linea
+            if (label) lineaLabelByRouteId.set(key, label)
+          }
+        }
+
+        withAccess = withAccess.map((b: any) => ({
+          ...b,
+          eot_nombre: eotNombre,
+          linea_label: lineaLabelByRouteId.get(String(b.route_id || '').toLowerCase().trim()) || null,
+        }))
+      } catch (enrichErr) {
+        console.error('Error enriqueciendo buses con linea_label:', enrichErr)
+        // No fallar: continuar sin el enriquecimiento
+        withAccess = withAccess.map((b: any) => ({ ...b, eot_nombre: eotNombre }))
+      }
+    }
 
     if (
       userLat != null &&

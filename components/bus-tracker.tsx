@@ -1806,14 +1806,16 @@ export function BusTracker() {
         setNearestBusLabel(label)
 
         // Etiqueta más descriptiva para los anuncios de voz
+        // Preferimos linea_label (nombre descriptivo ej: "eléctrico") sobre route_id (código)
         const empNombre = focus.eot_nombre || ""
-        const voiceLabel = focus.route_id && empNombre
-          ? `Línea ${focus.route_id} de ${empNombre}`
-          : focus.route_id
-          ? `Línea ${focus.route_id}`
+        const lineDesc = (focus as any).linea_label || focus.route_id || ""
+        const voiceLabel = lineDesc && empNombre
+          ? `${lineDesc}, del ${empNombre}`
+          : lineDesc
+          ? lineDesc
           : empNombre
-          ? `${empNombre}, bus número ${focus.mean_id}`
-          : `Bus número ${focus.mean_id}`
+          ? empNombre
+          : `bus número ${focus.mean_id}`
 
         if (focus.passedBoardingStop) {
           setProximityStatus("pasado")
@@ -1955,13 +1957,14 @@ export function BusTracker() {
           const statusKey = getRealBusStatusKey(realBus.velocidad)
           const statusLabel = STATUS_LABEL[statusKey]
           const empNombreSelect = (realBus as any).eot_nombre || ""
-          const lineDescSelect = realBus.route_id && empNombreSelect
-            ? `Línea ${realBus.route_id} de ${empNombreSelect}`
-            : realBus.route_id
-            ? `Línea ${realBus.route_id}`
-            : empNombreSelect || `bus número ${realBus.mean_id}`
+          const lineDescSelect = (realBus as any).linea_label || realBus.route_id || ""
+          const lineStr = lineDescSelect && empNombreSelect
+            ? `${lineDescSelect}, del ${empNombreSelect}`
+            : lineDescSelect || empNombreSelect
           const speedStr = realBus.velocidad > 0 ? `${Math.round(realBus.velocidad)} kilómetros por hora` : "detenido"
-          const message = `Seleccionado: ${lineDescSelect}. Estado: ${statusLabel}, velocidad ${speedStr}.`
+          const message = lineStr
+            ? `Seleccionado: ${lineStr}. Estado: ${statusLabel}, velocidad ${speedStr}.`
+            : `Seleccionado bus número ${realBus.mean_id}. Estado: ${statusLabel}, velocidad ${speedStr}.`
           speak(message, { force: true })
           return
         }
