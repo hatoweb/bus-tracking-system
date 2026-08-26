@@ -113,14 +113,6 @@ function PlaceSearchField({
     return () => document.removeEventListener("mousedown", onDocClick)
   }, [])
 
-  // Si se activa focusTrigger para editar y ya tenía valor fijo, pasarlo a query editable
-  useEffect(() => {
-    if (focusTrigger && focusTrigger > 0 && variant === "destination" && valueLabel) {
-      setQuery(valueLabel)
-      onClear()
-    }
-  }, [focusTrigger, variant, valueLabel, onClear])
-
   useEffect(() => {
     if ((focusTrigger && focusTrigger > 0) || (autoFocus && !valueLabel)) {
       if (!valueLabel) {
@@ -317,6 +309,17 @@ function PlaceSearchField({
               if (hits.length > 0) setOpen(true)
             }}
             onBlur={() => setFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                if (open && hits.length > 0) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void resolveAndSelect(hits[0])
+                }
+              } else if (e.key === "Escape") {
+                setOpen(false)
+              }
+            }}
             placeholder={placeholder}
             className="min-w-0 flex-1 bg-transparent py-1 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             autoComplete="off"
@@ -351,8 +354,11 @@ function PlaceSearchField({
             <li key={hit.id}>
               <button
                 type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                }}
                 onClick={() => void resolveAndSelect(hit)}
-                className="flex w-full flex-col gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-muted/70"
+                className="flex w-full flex-col gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-muted/70 cursor-pointer"
               >
                 <span className="text-[12px] font-medium leading-snug text-foreground">
                   {hit.label}
