@@ -284,6 +284,7 @@ export function BusTracker() {
   const [matchingItinerarioIds, setMatchingItinerarioIds] = useState<number[]>([])
   const [empresaCercanasChecking, setEmpresaCercanasChecking] = useState(false)
   const geoWatchIdRef = useRef<number | null>(null)
+  const geoDeniedRef = useRef(false)
   const nearbyFetchAbortRef = useRef<AbortController | null>(null)
   const nearbyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const allItinerariesRef = useRef<RealItinerary[]>([])
@@ -1669,66 +1670,93 @@ export function BusTracker() {
   )
 
   // Solicitar compartir ubicación + seguimiento continuo
-  const handleShareLocation = useCallback(() => {
-    if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      speak("Geolocalización no disponible en este dispositivo", { force: true })
-      return
-    }
+  const handleShareLocation = useCallback(
+    (force = false) => {
+      if (typeof window === "undefined" || !("geolocation" in navigator)) {
+        speak("Geolocalización no disponible en este dispositivo", { force: true })
+        return
+      }
 
-    // Chrome solo permite GPS en HTTPS o localhost (no en http://IP)
-    if (!window.isSecureContext) {
-      const httpsUrl = `https://sistemas.mopc.gov.py/prototipo_vmt/`
-      const msg = "El GPS requiere HTTPS. Abrí sistemas.mopc.gov.py/prototipo_vmt o marcá el origen en el mapa."
-      speak(msg, { force: true })
-      setTripFormOpen(true)
-      showToast(
-        `El navegador bloquea el GPS en HTTP. Abrí la versión segura (${httpsUrl}) o marcá el origen en el mapa.`,
-        "error"
+      // Si el usuario denegó el permiso y no es un click explícito del botón GPS, no volver a solicitar
+      if (geoDeniedRef.current && !force) {
+        return
+      }
+
+      // Chrome solo permite GPS en HTTPS o localhost (no en http://IP)
+      if (!window.isSecureContext) {
+        const httpsUrl = `https://sistemas.mopc.gov.py/prototipo_vmt/`
+        const msg = "El GPS requiere HTTPS. Abrí sistemas.mopc.gov.py/prototipo_vmt o marcá el origen en el mapa."
+        speak(msg, { force: true })
+        setTripFormOpen(true)
+        showToast(
+          `El navegador bloquea el GPS en HTTP. Abrí la versión segura (${httpsUrl}) o marcá el origen en el mapa.`,
+          "error"
+        )
+        return
+      }
+
+      stopLocationWatch()
+
+      const geoOptions: PositionOptions = {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 5000,
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          geoDeniedRef.current = false
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          applyUserLocation(lat, lng, true)
+          fetchNearbyStopsDebounced(lat, lng, true)
+
+          // Iniciar watch continuo SOLO si getCurrentPosition tuvo éxito
+          stopLocationWatch()
+          geoWatchIdRef.current = navigator.geolocation.watchPosition(
+            (watchPos) => {
+              const wLat = watchPos.coords.latitude
+              const wLng = watchPos.coords.longitude
+              applyUserLocation(wLat, wLng, false)
+              fetchNearbyStopsDebounced(wLat, wLng, false)
+            },
+            (watchErr) => {
+              if (watchErr.code === 1) {
+                // PERMISSION_DENIED
+                geoDeniedRef.current = true
+                stopLocationWatch()
+                setIsTrackingLocation(false)
+              }
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 7000 }
+          )
+          setIsTrackingLocation(true)
+        },
+        (err) => {
+          stopLocationWatch()
+          setIsTrackingLocation(false)
+          if (err.code === 1) {
+            // PERMISSION_DENIED: el usuario denegó el permiso
+            geoDeniedRef.current = true
+            if (force) {
+              showToast(
+                "Permiso de ubicación no concedido en el navegador. Podés marcar tu origen en el mapa.",
+                "warning"
+              )
+            }
+          } else {
+            // Fallback Asunción (Mcal. López) si la señal falló o dio timeout
+            const lat = -25.2865
+            const lng = -57.608
+            applyUserLocation(lat, lng, false)
+            fetchNearbyStopsDebounced(lat, lng, true)
+          }
+        },
+        geoOptions
       )
-      return
-    }
-
-    stopLocationWatch()
-
-    const geoOptions: PositionOptions = {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 5000,
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        applyUserLocation(lat, lng, true)
-        fetchNearbyStopsDebounced(lat, lng, true)
-      },
-      (err) => {
-        console.warn("Geolocalización denegada o no disponible:", err.message)
-        // Fallback Asunción (Mcal. López) para pruebas
-        const lat = -25.2865
-        const lng = -57.608
-        applyUserLocation(lat, lng, false)
-        speak("Ubicación aproximada compartida", { force: true })
-        fetchNearbyStopsDebounced(lat, lng, true)
-      },
-      geoOptions
-    )
-
-    geoWatchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        applyUserLocation(lat, lng, false)
-        fetchNearbyStopsDebounced(lat, lng, false)
-      },
-      (err) => {
-        console.warn("Error en seguimiento de ubicación:", err.message)
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 7000 }
-    )
-    setIsTrackingLocation(true)
-  }, [applyUserLocation, fetchNearbyStopsDebounced, speak, stopLocationWatch])
+    },
+    [applyUserLocation, fetchNearbyStopsDebounced, speak, stopLocationWatch, showToast]
+  )
 
   // Reconsultar cercanas si cambian radio/top N y ya hay ubicación
   useEffect(() => {
@@ -3010,7 +3038,7 @@ export function BusTracker() {
                         stopLocationWatch()
                         speak("Seguimiento GPS detenido", { force: true })
                       } else {
-                        handleShareLocation()
+                        handleShareLocation(true)
                       }
                     }}
                     className={`flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold transition-all shadow-sm ${
