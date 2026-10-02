@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { clipItineraryGeoJSON, pickTripEndPoint } from "@/lib/clip-itinerary"
+import { WazeAlert, WazeJam } from "@/lib/waze-types"
 
 export type RealBus = {
   id: string
@@ -93,6 +94,10 @@ type RealRouteMapProps = {
   /** Borradores de origen/destino antes de planificar */
   draftOrigin?: { lat: number; lng: number; label?: string } | null
   draftDestination?: { lat: number; lng: number; label?: string } | null
+  /** Datos e incidentes en vivo de Waze for Cities (CCP) */
+  wazeData?: { alerts: WazeAlert[]; jams: WazeJam[] } | null
+  /** Alternar visualización de capas Waze en el mapa */
+  showWaze?: boolean
 }
 
 function getBusStatusColor(velocidad: number): { statusKey: string; statusLabel: string; color: string } {
@@ -411,6 +416,74 @@ const createDestinationIcon = () => {
   })
 }
 
+const createWazeAlertIcon = (type: string) => {
+  let emoji = "🚗"
+  let bg = "#f59e0b"
+  const t = (type || "").toUpperCase()
+  if (t === "ACCIDENT") {
+    emoji = "💥"
+    bg = "#ef4444"
+  } else if (t === "JAM") {
+    emoji = "🚦"
+    bg = "#f97316"
+  } else if (t === "ROAD_CLOSED") {
+    emoji = "⛔"
+    bg = "#7c3aed"
+  } else if (t === "HAZARD") {
+    emoji = "⚠️"
+    bg = "#eab308"
+  }
+
+  return L.divIcon({
+    className: "custom-waze-alert-icon",
+    html: `
+      <div style="
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: translate(-50%, -50%);
+        cursor: pointer;
+      ">
+        <div style="
+          position: absolute;
+          width: 30px;
+          height: 30px;
+          border-radius: 9999px;
+          background-color: ${bg};
+          opacity: 0.35;
+          animation: pulse 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+        "></div>
+        <div style="
+          position: relative;
+          width: 26px;
+          height: 26px;
+          border-radius: 9999px;
+          background: ${bg};
+          border: 2px solid #ffffff;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+        ">
+          ${emoji}
+        </div>
+      </div>
+    `,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  })
+}
+
+const getWazeJamColor = (level: number) => {
+  if (level >= 5) return "#991b1b"
+  if (level === 4) return "#dc2626"
+  if (level === 3) return "#ea580c"
+  if (level === 2) return "#f59e0b"
+  return "#eab308"
+}
+
 export function RealRouteMap({
   buses,
   itineraries,
@@ -431,6 +504,8 @@ export function RealRouteMap({
   onMapPointPick,
   draftOrigin = null,
   draftDestination = null,
+  wazeData = null,
+  showWaze = true,
 }: RealRouteMapProps) {
   const mapRef = useRef<L.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -444,6 +519,8 @@ export function RealRouteMap({
   const draftDestMarkerRef = useRef<L.Marker | null>(null)
   const tripRouteLayerRef = useRef<L.Polyline | null>(null)
   const geojsonLayerRef = useRef<L.GeoJSON | null>(null)
+  const wazeAlertsLayerRef = useRef<L.LayerGroup | null>(null)
+  const wazeJamsLayerRef = useRef<L.LayerGroup | null>(null)
   const lastNearbyFitKeyRef = useRef<string>("")
   const programmaticMoveRef = useRef(false)
   const lastFocusedBusRef = useRef<string | null>(null)
@@ -499,6 +576,14 @@ export function RealRouteMap({
     return () => {
       map.off("dragstart", notifyUserInteract)
       map.off("zoomstart", notifyUserInteract)
+      if (wazeAlertsLayerRef.current) {
+        map.removeLayer(wazeAlertsLayerRef.current)
+        wazeAlertsLayerRef.current = null
+      }
+      if (wazeJamsLayerRef.current) {
+        map.removeLayer(wazeJamsLayerRef.current)
+        wazeJamsLayerRef.current = null
+      }
       map.remove()
       mapRef.current = null
     }
@@ -1037,6 +1122,113 @@ export function RealRouteMap({
       lastFocusedBusRef.current = null
     }
   }, [buses, selectedBusId, onSelectBus])
+
+  // Capa de alertas y congestión vial Waze for Cities (CCP)
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    if (wazeAlertsLayerRef.current) {
+      mapRef.current.removeLayer(wazeAlertsLayerRef.current)
+      wazeAlertsLayerRef.current = null
+    }
+    if (wazeJamsLayerRef.current) {
+      mapRef.current.removeLayer(wazeJamsLayerRef.current)
+      wazeJamsLayerRef.current = null
+    }
+
+    if (!showWaze || !wazeData) return
+
+    // 1. Alertas de incidentes (Accidentes, Obras, Baches, Tráfico severo)
+    const alertsGroup = L.layerGroup()
+    if (Array.isArray(wazeData.alerts)) {
+      wazeData.alerts.forEach((alert) => {
+        if (!alert.location || alert.location.lat == null || alert.location.lon == null) return
+        const marker = L.marker([alert.location.lat, alert.location.lon], {
+          icon: createWazeAlertIcon(alert.type),
+          zIndexOffset: 1200,
+        })
+
+        const typeColor =
+          alert.type === "ACCIDENT"
+            ? "#ef4444"
+            : alert.type === "ROAD_CLOSED"
+            ? "#7c3aed"
+            : alert.type === "HAZARD"
+            ? "#eab308"
+            : "#f97316"
+
+        const timeStr = alert.pubMillis
+          ? `${Math.max(1, Math.round((Date.now() - alert.pubMillis) / 60000))} min`
+          : "Reciente"
+
+        const popupHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 12px; min-width: 220px; padding: 2px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+              <span style="font-weight: 800; color: ${typeColor}; display: flex; align-items: center; gap: 4px;">
+                🚗 Waze: ${alert.type}
+              </span>
+              <span style="font-size: 10px; color: #64748b; background: #f1f5f9; padding: 1px 6px; border-radius: 9999px;">
+                Hace ${timeStr}
+              </span>
+            </div>
+            <div style="font-weight: 700; font-size: 13px; color: #1e293b; margin-bottom: 2px;">
+              ${alert.street || "Vía pública"}
+            </div>
+            ${alert.municipio ? `<div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${alert.municipio}</div>` : ""}
+            <div style="font-size: 11px; color: #334155; background: #f8fafc; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; border: 1px solid #e2e8f0;">
+              ${alert.descripcion || alert.subtype || "Incidente vial reportado en tiempo real"}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #94a3b8;">
+              <span>Confiabilidad comunitaria:</span>
+              <strong style="color: #0284c7;">⭐ ${alert.reliability || 8}/10</strong>
+            </div>
+          </div>
+        `
+        marker.bindPopup(popupHtml)
+        alertsGroup.addLayer(marker)
+      })
+    }
+    alertsGroup.addTo(mapRef.current)
+    wazeAlertsLayerRef.current = alertsGroup
+
+    // 2. Tramos de atasco / Jams reportados por Waze
+    const jamsGroup = L.layerGroup()
+    if (Array.isArray(wazeData.jams)) {
+      wazeData.jams.forEach((jam) => {
+        if (!Array.isArray(jam.line) || jam.line.length < 2) return
+        const latLngs: L.LatLngExpression[] = jam.line.map((pt) => [pt.lat, pt.lon])
+        const color = getWazeJamColor(jam.level)
+
+        const polyline = L.polyline(latLngs, {
+          color,
+          weight: 6,
+          opacity: 0.85,
+        })
+
+        const delayMin = Math.round((jam.delaySeconds || 0) / 60)
+
+        const popupHtml = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 12px; min-width: 200px; padding: 2px;">
+            <div style="font-weight: 800; color: ${color}; font-size: 13px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 5px;">
+              🚦 Congestión Waze (Nivel ${jam.level}/5)
+            </div>
+            <div style="font-weight: 700; color: #1e293b;">${jam.street}</div>
+            ${jam.municipio ? `<div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${jam.municipio}</div>` : ""}
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #f8fafc; padding: 6px; border-radius: 6px; font-size: 11px; margin-top: 4px;">
+              <div>Velocidad: <strong>${jam.speedKMH} km/h</strong></div>
+              <div>Flujo libre: <strong>${jam.freeFlowSpeedKMH} km/h</strong></div>
+              <div>Retraso: <strong style="color: #dc2626;">+${delayMin} min</strong></div>
+              <div>Extensión: <strong>${jam.lengthMeters} m</strong></div>
+            </div>
+          </div>
+        `
+        polyline.bindPopup(popupHtml)
+        jamsGroup.addLayer(polyline)
+      })
+    }
+    jamsGroup.addTo(mapRef.current)
+    wazeJamsLayerRef.current = jamsGroup
+  }, [wazeData, showWaze])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl border border-border bg-card">

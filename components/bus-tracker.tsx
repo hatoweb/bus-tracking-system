@@ -21,6 +21,7 @@ import {
   ChevronDown,
   X,
   Compass,
+  ExternalLink,
 } from "lucide-react"
 import {
   type Bus,
@@ -44,9 +45,11 @@ import { FeedbackPanel } from "@/components/feedback-panel"
 import { useSession } from "next-auth/react"
 import { GoogleAuthModal, type UserProfile } from "@/components/google-auth-modal"
 import { AlertsModal } from "@/components/alerts-modal"
+import { WazeLiveModal } from "@/components/waze-live-modal"
 import { TripPlanner, type TripPlanPayload, type TripPlace } from "@/components/trip-planner"
 import dynamic from "next/dynamic"
 import { type RealBus, type RealItinerary, type RealStop, type NearbyStop } from "@/components/real-route-map"
+import { type WazeData } from "@/lib/waze-types"
 import { apiUrl } from "@/lib/base-path"
 import { estimateEtaMinutes } from "@/lib/bus-accesibilidad"
 import { formatTripPlanSummary, type TripPlanResult } from "@/lib/trip-plan"
@@ -170,6 +173,12 @@ export function BusTracker() {
 
   const [empresas, setEmpresas] = useState<any[]>([])
   const [selectedCodCatalogo, setSelectedCodCatalogo] = useState<string>("")
+
+  // Estados Waze for Cities (CCP)
+  const [wazeData, setWazeData] = useState<WazeData | null>(null)
+  const [showWaze, setShowWaze] = useState<boolean>(true)
+  const [showWazeLiveMap, setShowWazeLiveMap] = useState<boolean>(false)
+  const [wazeMunicipio, setWazeMunicipio] = useState<string>("Asunción")
 
   // Estados de Usuario Google y Modales
   const [user, setUser] = useState<UserProfile | null>(null)
@@ -335,6 +344,29 @@ export function BusTracker() {
     }
     loadEmpresas()
   }, [])
+
+  // Cargar y actualizar incidentes viales de Waze for Cities (CCP)
+  useEffect(() => {
+    let isMounted = true
+    async function loadWazeData() {
+      try {
+        const query = wazeMunicipio && wazeMunicipio !== "Todos" ? `?municipio=${encodeURIComponent(wazeMunicipio)}` : ""
+        const res = await fetch(apiUrl(`/api/waze${query}`))
+        const json = await res.json()
+        if (isMounted && json.success && json.data) {
+          setWazeData(json.data)
+        }
+      } catch (err) {
+        console.error("Error cargando datos de Waze:", err)
+      }
+    }
+    loadWazeData()
+    const interval = setInterval(loadWazeData, 60000)
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [wazeMunicipio])
 
   // Polling de Datos Reales de las BDs PostgreSQL
   useEffect(() => {
@@ -2490,6 +2522,40 @@ export function BusTracker() {
 
               {/* Mapa siempre visible */}
               <div className="relative h-[min(42vh,360px)] min-h-[260px] shrink-0">
+                {/* Botones de Control de Tráfico Waze */}
+                <div className="absolute right-2 top-2 z-[400] flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !showWaze
+                      setShowWaze(next)
+                      speak(next ? "Capas de Waze activadas" : "Capas de Waze ocultas", { force: true })
+                    }}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold shadow-md transition-all backdrop-blur-md ${
+                      showWaze
+                        ? "bg-amber-500 text-white hover:bg-amber-600 border border-amber-400"
+                        : "bg-background/85 text-muted-foreground hover:bg-background border border-border/80"
+                    }`}
+                    title="Alternar alertas de incidentes y atascos de Waze en el mapa"
+                  >
+                    <span>🚗 Waze</span>
+                    {wazeData?.alerts && wazeData.alerts.length > 0 && (
+                      <span className="rounded-full bg-black/25 px-1.5 py-0.2 text-[9px] font-black text-white">
+                        {wazeData.alerts.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowWazeLiveMap(true)}
+                    className="flex items-center gap-1 rounded-lg border border-sky-400/80 bg-sky-500/90 px-2 py-1 text-[11px] font-bold text-white shadow-md transition-all hover:bg-sky-600 backdrop-blur-md"
+                    title="Abrir visor oficial interactivo de Waze Live Map"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    <span>Live Map</span>
+                  </button>
+                </div>
+
                 {mapPickMode && (
                   <div className="absolute left-2 right-2 top-2 z-[600] flex items-center justify-between gap-2 rounded-lg border border-sky-500/50 bg-sky-500/95 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-md">
                     <span>
@@ -2517,6 +2583,8 @@ export function BusTracker() {
                     destination={tripDestination}
                     routeStart={routeStartPoint}
                     tripRouteCoords={tripRouteCoords}
+                    wazeData={wazeData}
+                    showWaze={showWaze}
                     userLocation={
                       user?.locationShared && user.lat != null && user.lng != null
                         ? { lat: user.lat, lng: user.lng }
@@ -3452,6 +3520,13 @@ export function BusTracker() {
       <AlertsModal
         isOpen={isAlertsModalOpen}
         onClose={() => setIsAlertsModalOpen(false)}
+      />
+
+      <WazeLiveModal
+        isOpen={showWazeLiveMap}
+        onClose={() => setShowWazeLiveMap(false)}
+        userLocation={user?.lat && user?.lng ? { lat: user.lat, lng: user.lng } : null}
+        defaultMunicipio={wazeMunicipio}
       />
 
       {/* Modal flotante de Reclamos y Sugerencias */}
