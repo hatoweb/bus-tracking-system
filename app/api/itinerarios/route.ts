@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
       JOIN public.eots e ON r.id_eot_catalogo = e.cod_catalogo
       WHERE ${sqlItinerarioVigenteEnFecha('h')}
+        AND e.permisionario = true
     `
 
     const values: any[] = []

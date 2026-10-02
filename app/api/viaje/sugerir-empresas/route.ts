@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
       ${sqlJoinLineaVigente('r', 'lrc', 'ln')}
       JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
       WHERE p.id = ANY($1::int[])
+        AND e.permisionario = true
       ${empresaFilter}
       GROUP BY e.cod_catalogo, e.eot_nombre, e.eot_linea, e.eot_id, e.id_eot_vmt_hex
       ORDER BY paradas_origen DESC, e.eot_nombre
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest) {
         JOIN public.catalogo_rutas r ON LOWER(r.ruta_hex) = LOWER(h.ruta_hex)
         JOIN public.eots e ON e.cod_catalogo = r.id_eot_catalogo
         WHERE p.id = ANY($1::int[])
+          AND e.permisionario = true
         ${destEmpresaFilter}
         GROUP BY e.cod_catalogo
         `,

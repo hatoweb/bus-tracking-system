@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       JOIN geometria.itinerario_parada ip ON ip.id_itinerario = h.id_itinerario
       JOIN geometria.paradas_oficiales p ON p.id = ip.id_parada
       WHERE ${sqlItinerarioVigenteEnFecha('h')}
+        AND e.permisionario = true
     `
 
     const values: any[] = []

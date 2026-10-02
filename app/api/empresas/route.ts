@@ -19,6 +19,7 @@ export async function GET() {
       JOIN public.catalogo_rutas r ON r.id_eot_catalogo = e.cod_catalogo
       JOIN geometria.historico_itinerario h ON LOWER(h.ruta_hex) = LOWER(r.ruta_hex)
       WHERE ${sqlItinerarioVigenteEnFecha('h')}
+        AND e.permisionario = true
       ORDER BY e.eot_nombre ASC;
     `)
 
